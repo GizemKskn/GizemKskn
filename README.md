@@ -8,7 +8,7 @@
   <a href="https://www.linkedin.com/in/gizemkskn/" target="_blank">
     <img src="https://img.shields.io/static/v1?message=LinkedIn&logo=linkedin&label=&color=0077B5&logoColor=white&labelColor=&style=for-the-badge" height="25" alt="linkedin logo"  />
   </a>
-  <a href="gizem3keskin@gmail.com" target="_blank">
+  <a href="mailto:gizem3keskin@gmail.com" target="_blank">
     <img src="https://img.shields.io/static/v1?message=Gmail&logo=gmail&label=&color=D14836&logoColor=white&labelColor=&style=for-the-badge" height="25" alt="gmail logo"  />
   </a>
   <a href="https://www.instagram.com/gizemkskn3/" target="_blank">
@@ -26,11 +26,15 @@
 
 ###
 
-<p align="left">A passionate Ai developer from Turkey<br><br>- 🔭 I’m working as R&D Image Processing and AI Engineer<br><br>- 📚 I'm currently learning;<br>Deep learning frameworks such as TensorFlow and Keras for building and training neural networks<br>Advanced machine learning algorithms such as support vector machines (SVMs), random forests, and gradient boosting<br>Computer vision techniques including object detection, segmentation, and image classification<br><br>- ⚡ In my free time i enjoy exploring new developments and advancements in the fields of image processing and artificial intelligence. I like to read academic papers, experiment with new algorithms and models, and participate in online communities to stay up-to-date with the latest trends and technologies.<br><br>Aside from my work in these fields, I also practice Aikido, a Japanese martial art that emphasizes using an opponent's energy and movements to neutralize their attack. Aikido requires patience, focus, and discipline, which helps me to stay grounded and balanced in both my personal and professional life.<br><br>🌸 I enjoy sharing my knowledge with others and collaborating on projects that push the boundaries of what's possible with these powerful technologies.</p>
+<p align="left">
+I'm an AI and Computer Vision Engineer with dual bachelor's degrees in Computer Engineering and Mechatronics Engineering.  
+My work focuses on developing and optimizing deep learning models for object detection, pose estimation, and intelligent visual systems.  
+I'm passionate about exploring new approaches in vision-based AI, staying up-to-date with cutting-edge research, and continuously improving my expertise in machine learning and neural network design.
+</p>
 
 ###
 
-<h3 align="left">📚 Programing Languages and Libraries</h3>
+<h3 align="left">📚 Programming Languages and Libraries</h3>
 
 ###
 
