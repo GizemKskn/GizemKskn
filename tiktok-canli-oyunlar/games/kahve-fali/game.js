@@ -1651,7 +1651,6 @@
     var prog = clamp01(ex.t / ex.dur);
     ctx.fillStyle = 'rgba(255,230,200,0.25)'; ui.roundRect(ctx, CX - 400, 1104, 800, 10, 5); ctx.fill();
     ctx.fillStyle = '#ffd166'; ui.roundRect(ctx, CX - 400, 1104, Math.max(10, 800 * (1 - prog)), 10, 5); ctx.fill();
-    ui.text(ctx, 'Eğlence amaçlıdır 😄', CX + 400, 1088, { size: 20, align: 'right', color: 'rgba(255,236,210,0.85)', stroke: false });
     ctx.restore();
   }
 
@@ -1672,7 +1671,7 @@
   }
   function drawTitle(ctx, t) {
     var y = 292;
-    var discl = !overlayOn();
+    var discl = !cardShowing();   // kartın kendi altında da yazıyor
     if (banner) {
       drawBanner(ctx, banner, t);
       if (discl && banner.tier < 5) ui.text(ctx, 'Eğlence amaçlıdır 😄', CX, 352, { size: 22, color: 'rgba(255,236,210,0.8)', stroke: false });
