@@ -2201,10 +2201,10 @@
       var cy0 = 760;
       g.save(); g.translate(W / 2, cy0); g.rotate(t * 0.4);
       g.globalCompositeOperation = 'lighter';
-      for (var i = 0; i < 14; i++) {
-        g.rotate(TAU / 14);
-        g.fillStyle = 'rgba(255,200,80,0.10)';
-        g.beginPath(); g.moveTo(0, 0); g.lineTo(-60, -700); g.lineTo(60, -700); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(255,200,80,0.12)';
+      for (var i = 0; i < 12; i++) {
+        g.rotate(TAU / 12);
+        g.beginPath(); g.moveTo(0, 0); g.lineTo(-50, -560); g.lineTo(50, -560); g.closePath(); g.fill();
       }
       g.restore();
       g.translate(W / 2, cy0); g.scale(sc, sc);

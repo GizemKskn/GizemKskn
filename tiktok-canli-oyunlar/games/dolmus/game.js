@@ -489,6 +489,7 @@
   // Ortak yumuşak sınır, hediyenin kendisi de sayılarak kontrol ediliyor (tek büyük hediye hep sadeleşiyordu).
   // Bu yüzden sınırı hediyeden ÖNCEKİ jeton toplamıyla kontrol ediyoruz.
   function spotAllowed(u, tier, total) {
+    if (u._coinsBeforeLast != null) return ui.spotlightAllowed(u, tier); // yeni ortak kod bunu zaten yapıyor
     var c = u.coins;
     u.coins = Math.max(0, c - (total || 0));
     try { return ui.spotlightAllowed(u, tier); } finally { u.coins = c; }
@@ -1706,21 +1707,22 @@
       var space = fx.rocket && fx.rocket.t >= 4.0 && fx.rocket.t < 10.5;
       ctx.save();
       ui.applyShake(ctx);
+      var SK = window.__dolSkip || {};
       if (space) {
         drawSpace(ctx, t);
       } else {
-        drawBackground(ctx, t);
+        if (!SK.bg) drawBackground(ctx, t); else { ctx.fillStyle = '#58c'; ctx.fillRect(0, 0, W, LG.H); }
         // gölge
         var sh = clamp(1 - bus.alt / 400, 0.2, 1);
         ctx.fillStyle = 'rgba(0,0,0,' + 0.3 * sh + ')';
         ctx.beginPath(); ctx.ellipse(BUS_X, GROUND + 2, 400 * sh, 16 * sh, 0, 0, TAU); ctx.fill();
         drawSpeedLines(ctx);
-        drawBus(ctx, t, false);
+        if (!SK.bus) drawBus(ctx, t, false);
         drawWind(ctx, t);
         drawProps(ctx, t);
         var showSign = G.state === 'brake' ? true : G.signX > -200 && G.signX < W + 200;
         if (showSign) A.stopSign(ctx, G.signX, 1150, G.signName, 1);
-        drawCrowdAndWalkers(ctx, t);
+        if (!SK.crowd) drawCrowdAndWalkers(ctx, t);
         drawAllTags(ctx, t);
         drawBubbles(ctx);
         drawNotesWorld(ctx, t);

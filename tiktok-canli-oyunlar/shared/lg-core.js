@@ -63,6 +63,7 @@
     footer: qb('footer', true), // "Hediye zorunlu değil" notu
     softcap: qn('softcap', 5000), // bir izleyici bu oturumda bu kadar jetonu geçince kutlamalar sadeleşir (0 = kapalı)
     spotlightCooldown: qn('cooldown', 25), // aynı kişi için büyük kutlamalar arası en az saniye
+    renk: qn('renk', 0), // renk teması: tüm renkleri bu kadar derece kaydır (0-360). Her yayıncının oyunu farklı görünsün diye.
   };
   LG.qp = qp; LG.qb = qb; LG.qn = qn;
 
@@ -631,6 +632,7 @@
     canvas.id = 'lg-canvas';
     document.body.appendChild(canvas);
     if (LG.config.transparent) document.documentElement.classList.add('lg-transparent');
+    if (LG.config.renk) canvas.style.filter = 'hue-rotate(' + LG.config.renk + 'deg)';
     var ctx = canvas.getContext('2d');
     LG.canvas = canvas; LG.ctx = ctx;
 

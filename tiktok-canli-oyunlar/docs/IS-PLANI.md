@@ -28,7 +28,9 @@ Varsayım: saatteki tekil izleyici ≈ 4 × ortalama anlık izleyici.
 
 **Önemli gerçekler:**
 - Türkiye'deki 1.782 yayıncının ortanca kazancı çalışılan dönemde sadece ~1.600 elmas. En üst %10 ortancanın ~25 katını kazanıyor. Kazanç çok az kişide toplanıyor.
-- Yeni hesabın ilk ayı takipçi toplamakla geçer. Kaynaklarda Türkiye için ~1.000 takipçi deniyor, ama TikTok bunu resmi olarak doğrulamıyor. Bu ayda canlı yayından para gelmez.
+- Yeni hesabın ilk ayı takipçi toplamakla geçer: TikTok'un yardım sayfasına göre canlı yayın için **1.000 takipçi** gerekiyor ("bölgeye göre değişebilir"). Bu ayda canlı yayından para gelmez.
+- Türkiye'de **kısa videolar para kazandırmıyor** (Creator Rewards programı Türkiye'de yok). Kısa videolar sadece canlı yayına izleyici ve mağazaya alıcı getirir.
+- TikTok ödemeyi Türkiye'ye **banka havalesiyle** (IBAN + kimlik doğrulama) yapıyor; PayPal yok.
 - 2–3. aylar büyük ihtimalle kötümser senaryoda geçer. 4–6. aylarda, haftada 4 sabit yayınla, gerçekçi senaryoya çıkılabilir.
 - İyimser senaryo, viral olan bir kısa video ve ortalama 150+ anlık izleyici gerektirir.
 - Etkileşimli oyun araçlarını deneyen yayıncıların çoğu bir kez deneyip bırakıyor (satıcı verisine göre kişi başı ortalama ~3 saat). **Düzenli devam eden fark yaratır.**
@@ -81,10 +83,21 @@ Yeni bir satıcı için ayda **3–15 alıcı** gerçekçi bir hedef. itch.io'da
 
 | Kanal | Ne için | Not |
 |---|---|---|
-| **Shopier** | Türkiye satışları | Komisyon %5,99 + ₺0,49 (aylık ₺15 bine kadar). Ödeme çarşamba günleri. Şirket ve fatura gerekir. |
-| **Lemon Squeezy** | Yurtdışı abonelik | %5 + 50¢ (+ uluslararası kart/abonelik ekleri). Yabancı KDV'yi kendisi halleder. Türkiye'ye banka ödemesi var. |
-| **itch.io** | Yurtdışı tek seferlik | %10 (ayarlanabilir) + işlem ücreti. Ödeme alt sınırı $5, 7–30 gün bekleme. |
-| Gumroad | — | Ana kanal olarak önerilmez (%10 + 50¢). |
+| **Shopier** veya **iyzico link** | Türkiye satışları | Shopier %5,99 + ₺0,49, ödeme çarşamba. iyzico link %4,49 + ₺0,25 (bireysel), ertesi gün ödeme. Şirket + fatura gerekir. E-ticaret aracılarında %1 stopaj var (2025'ten beri). |
+| **Gumroad** | Yurtdışı (ana kanal) | %10 + $0,50. Satıcı adına vergiyi kendisi halleder (merchant of record), **Türk bankasına TL ödeme** yapıyor (haftalık, $100 alt sınır), lisans anahtarı özelliği var. |
+| Lemon Squeezy | Yurtdışı (yedek) | %5 + 50¢. Stripe'a geçiş sürecinde, Türkiye desteği belirsizleşebilir. |
+| itch.io | Ücretsiz demo + keşif | Türkiye'den ödeme sadece Payoneer ile. Ücretsiz demoları buraya koy, keşfedilsin. |
+| ❌ PayPal, Papara | — | PayPal Türkiye'de yok. Papara'ya 2025'te kayyum atandı, kullanma. |
+
+**Vergi fırsatı (müşavire sor):** 2026'dan itibaren yurtdışına yazılım ihracatı kazancının **%100'ü** indirilebiliyor (CK 11257, RG 30.04.2026). Ancak Ocak 2026 tarihli bir GİB özelgesine göre hem Türk hem yabancı kullanıcıya açık yazılım bu indirimden yararlanamıyor. Bu, **ayrı bir İngilizce/uluslararası ürün hattı** (Türkiye'ye satılmayan) kurmak için bir sebep.
+
+**İade:** dijital içerik anında teslim edildiği için, satın almadan önce açık onay alırsan cayma hakkı uygulanmaz (Mesafeli Sözleşmeler Yönetmeliği md. 15/ğ). Satış sayfasına onay kutusu koy. Ücretsiz demo ve ucuz günlük bilet bu kuralı adil kılar.
+
+**Destek:** Türk alıcılar WhatsApp ya da Discord desteği bekliyor. Taleplerin çoğu kurulum sorunu olur. 60 saniyelik bir OBS kurulum videosu çek; simülatör de "bağlantı testi" yerine geçer.
+
+**Ajanslar (B2B):** TikTok "Creator Network" ajanslarını yayıncılarının yayın saatine göre ödüllendiriyor; bazıları (ör. Devify) yayıncılarına oyunları ücretsiz veriyor. 10/25/50 yayıncılık toplu lisans teklif et. Kendin bir ajansa girersen komisyon, münhasırlık ve çıkış şartlarını yazılı al; 60 günlük kilitlenme kabul etme.
+
+**Kişiselleştirme:** aynı oyunu 100 yayıncı açarsa TikTok bunu "özgün olmayan içerik" sayabilir. Her alıcıya kendi kullanıcı adını (`&brand=@ad`) ve kendi renk temasını (`&renk=120` gibi, 0–360) kullanmasını söyle. Özel tasarım ve özel oyun ayrıca satılabilir; Fiverr'da tek seferlik özel TikTok oyunu talebi var.
 
 **Teslimat:** `node tools/paketle.js --ad paket-v1 --iletisim "Instagram @hesabın"` ile zip oluştur. Sonra `node tools/lisans.js uret <alıcının_tiktok_adı> --gun 30` ile lisans üret ve alıcıya gönder. Lisans alıcının TikTok hesabına bağlı. Başka hesapta ya da süresi bitince oyun "DEMO" filigranıyla çalışır.
 

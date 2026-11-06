@@ -103,7 +103,7 @@
   var timers = [];
   var lastTick = -1;
   var lastLikeFx = 0, lastApplause = 0, lastWelcome = 0;
-  var infoItems = [], infoSlot = -999, infoT = 0;
+  var infoItems = [], infoSlot = -999, infoT = 0, followFocus = 0;
   var sparkles = [];
   var lastTen = false;
 
@@ -579,9 +579,9 @@
     if (S.phase === 'vote') {
       var c = voteChoice(e.raw);
       if (c >= 0) { castVote(u, c); handled = true; }
-    } else if (S.phase === 'jury' || (S.phase === 'task' && phaseLeft() < 1)) {
+    } else if (S.phase === 'jury') {
       var j = juryChoice(e.raw);
-      if (j && S.phase === 'jury') { castJury(u, j); handled = true; }
+      if (j) { castJury(u, j); handled = true; }
     }
     var cheer = isCheer(e);
     addEnergy(handled ? 1 : cheer ? 4 : 2, u, cheer ? 3 : 1);
@@ -616,6 +616,7 @@
     toast(ftxt, { icon: '➕', color: '#7dffcf', key: 'follow' });
     LG.sfx('heart');
     infoSlot = -999;
+    followFocus = LG.time + 4.5;
   });
   LG.on('share', function (e) {
     toast(e.user.name + ' paylaştı — çok teşekkürler!', { icon: '↗️', color: '#9be7ff' });
@@ -643,13 +644,15 @@
     if (target.length >= 3 || !free.length) { thanks(u, gname); applause(2); LG.sfx('coin'); return; }
     var tw = LG.pick(free);
     target.push({ tw: tw, by: u, born: LG.time, w: measure(tw.t, 30, 900) + 74, rot: LG.rand(-0.09, 0.09) });
-    toast('ZORLAŞTIR: ' + tw.t + ' · ' + u.name + ' (teşekkürler!)', { icon: '🔥', color: '#ffb347' });
+    var later2 = target === pendingTwists && S.phase !== 'vote';
+    toast('ZORLAŞTIR: ' + tw.t + (later2 ? ' (sıradaki görev)' : '') + ' · ' + u.name + ' — teşekkürler!', { icon: '🔥', color: '#ffb347' });
     LG.sfx('zap');
     ui.burst(win.x + win.w - 160, win.y + 10, { count: 30, speed: 500 });
   }
   function tier3(u, gname) {
     var canBonus = bonusQ.length < 2 && bonusQ.indexOf(u) < 0;
-    var canExtra = (S.phase === 'task' ? S.extraAdded : pendingExtra) < 120;
+    var cur = S.phase === 'task' || S.phase === 'reveal';
+    var canExtra = (cur ? S.extraAdded : pendingExtra) < 120;
     if (canBonus && (!canExtra || Math.random() < 0.5)) {
       bonusQ.push(u);
       toast('BONUS GÖREV sıraya eklendi · ' + u.name + ' — teşekkürler!', { icon: '⭐', color: '#ffd166', life: 4.5 });
@@ -658,8 +661,9 @@
       if (S.phase === 'task') {
         S.dur += 30; S.extraAdded += 30;
         ui.float('+30 SN', RING.x - 40, RING.y + 70, { size: 54, color: '#7dffcf', life: 1.6, vy: -40 });
-      } else pendingExtra += 30;
-      toast('+30 SANİYE · ' + u.name + ' — teşekkürler!', { icon: '⏱️', color: '#7dffcf', life: 4 });
+      } else if (S.phase === 'reveal') S.extraAdded += 30;
+      else pendingExtra += 30;
+      toast('+30 SANİYE' + (cur ? '' : ' (sıradaki görev)') + ' · ' + u.name + ' — teşekkürler!', { icon: '⏱️', color: '#7dffcf', life: 4 });
       LG.sfx('levelup');
     } else { thanks(u, gname); LG.sfx('coin'); }
     ui.burst(W / 2, win.y + 40, { count: 60, speed: 800 });
@@ -711,8 +715,8 @@
   });
   LG.onKey('t', '+30 saniye', function () {
     if (S.phase === 'result') return;
-    S.dur += 30;
-    if (S.phase === 'task' || S.phase === 'reveal') S.extraAdded += 30;
+    if (S.phase === 'reveal') S.extraAdded += 30;          // geri sayım uzamaz, görev süresi uzar
+    else { S.dur += 30; if (S.phase === 'task') S.extraAdded += 30; }
     ui.float('+30 SN', RING.x - 40, RING.y + 70, { size: 54, color: '#7dffcf', life: 1.6, vy: -40 });
     LG.sfx('coin');
   });
@@ -1072,16 +1076,11 @@
     ui.emoji(ctx, '✋', 0, 0, 56);
     ctx.restore();
     // skor
-    var txt = 'Görevler: ' + score.ok + ' ✅ / ' + score.fail + ' ❌';
-    var tw = measure(txt, 30) + 44;
+    var txt = 'Görevler: ' + score.ok + ' ✅ / ' + score.fail + ' ❌' + (score.streak >= 2 ? '  🔥' + score.streak : '');
+    var tw = Math.min(400, measure(txt, 30) + 44);
     var x = 1020 - tw;
     ui.panel(ctx, x, TITLE_Y - 27, tw, 54, { r: 27, fill: 'rgba(255,255,255,0.95)', border: '#3b0a5e', lineWidth: 4 });
-    ctext(ctx, txt, x + tw / 2, TITLE_Y + 2, { size: 30, color: '#2a1650', stroke: false });
-    if (score.streak >= 2) {
-      var st = '🔥 ' + score.streak + ' seri';
-      ui.panel(ctx, x - 6, TITLE_Y + 16, 120, 34, { r: 17, fill: '#ff006e', border: '#fff', lineWidth: 3 });
-      ctext(ctx, st, x + 54, TITLE_Y + 34, { size: 22, color: '#fff', stroke: false });
-    }
+    ctext(ctx, txt, x + tw / 2, TITLE_Y + 2, { size: 30, color: '#2a1650', stroke: false, maxWidth: tw - 30 });
   }
 
   function drawHeader(ctx, t) {
@@ -1471,7 +1470,7 @@
     if (S.phase !== 'vote' && S.bonusBy) items.push({ label: '⭐ Bonus görev:', users: [S.bonusBy] });
     if (topSup.length) items.push({ label: '💪 En çok destek:', users: topSup });
     var fl = followers.filter(function (f) { return LG.time - f.t < 150; }).map(function (f) { return f.u; });
-    if (fl.length) items.push({ label: '➕ Yeni takipçiler:', users: fl, col: '#06a77d' });
+    if (fl.length) items.push({ id: 'follow', label: '➕ Yeni takipçiler:', users: fl, col: '#06a77d' });
     if (legends.length) items.push({ label: '👑 Efsane Destekçi:', users: legends, col: '#c9900a' });
     if (!items.length) items.push({ text: '👋 Hoş geldin! Yorum yazarak oyuna katıl 💬' });
     return items;
@@ -1487,6 +1486,9 @@
     var it = infoItems[slot % infoItems.length];
     var ph = (Math.max(0, LG.time) % 4.5) / 4.5;
     var a = ph < 0.06 ? ph / 0.06 : ph > 0.94 ? (1 - ph) / 0.06 : 1;
+    if (LG.time < followFocus) {
+      for (var fi = 0; fi < infoItems.length; fi++) if (infoItems[fi].id === 'follow') { it = infoItems[fi]; a = 1; }
+    }
     ui.panel(ctx, x, y, w, h, { r: h / 2, fill: 'rgba(32,8,64,0.7)', border: 'rgba(255,255,255,0.25)', lineWidth: 3 });
     ctx.save();
     ctx.globalAlpha = a;
@@ -1662,6 +1664,9 @@
     hintBar(ctx);
     ctx.restore();
   }
+
+  // Test / hata ayıklama için salt-okunur durum (sadece ?debug=1)
+  if (LG.config.debug) window.__ES = { S: S, score: score, energy: energy, bonusQ: bonusQ, sponsorQ: sponsorQ, pendingTwists: function () { return pendingTwists; } };
 
   LG.start({
     id: 'ellerim-sizde',

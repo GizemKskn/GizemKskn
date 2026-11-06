@@ -50,6 +50,7 @@
     <span class="pill">🎁 <b id="coins">0</b> jeton ≈ <b id="tl">0</b> TL*</span>
     <label class="pill">Oyun: <select id="gameSel"></select></label>
     <button id="clearBtn" title="Selamlanan/teşekkür edilenleri temizle">🧹 Temizle</button>
+    <button id="clipBtn" title="Şu anı kısa video için işaretle (bridge/oturumlar/*-klipler.txt)">⭐ Klip anı</button>
   </header>
   <main>
     <section>
@@ -158,6 +159,10 @@
       var k = it.getAttribute('data-thank'); thanked.add(k);
       thanksQ = thanksQ.filter(function (g) { return g.key !== k; }); render();
     });
+    $('clipBtn').onclick = function () {
+      var ok = LG.sendControl({ action: 'highlight', note: ($('gameSel').value || 'genel') });
+      var b = $('clipBtn'); b.textContent = ok ? '⭐ İşaretlendi!' : '⭐ Köprü kapalı'; setTimeout(function () { b.textContent = '⭐ Klip anı'; }, 1500);
+    };
     $('clearBtn').onclick = function () { greetQ.forEach(function (g) { greeted.add(g.id); }); greetQ = []; thanksQ = []; render(); };
 
     // Oyun seçimi ve sunucu ipuçları

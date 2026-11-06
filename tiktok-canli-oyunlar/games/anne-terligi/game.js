@@ -1415,7 +1415,7 @@
     ui.text(ctx, S.treat.lab + ' kapanlar:', -w / 2 + 40, y, { size: 32, align: 'left', color: '#fff' });
     y += 50;
     if (!sm.winners.length) {
-      ui.text(ctx, sm.reason === 'rain' ? 'Yağmurda herkes payını aldı! ' + S.treat.emoji : 'Kimse kapamadı! Anne kazandı 😎', 0, y, { size: 32, color: '#ffb3c1', maxWidth: w - 80 });
+      ui.text(ctx, sm.reason === 'rain' ? 'Yağmurda ' + LG.fmt(sm.everyone) + ' kişi payını aldı! +1 ' + S.treat.emoji : 'Kimse kapamadı! Anne kazandı 😎', 0, y, { size: 32, color: '#ffb3c1', maxWidth: w - 80 });
       y += 50;
     } else {
       var medals = ['🥇', '🥈', '🥉'];
@@ -1436,9 +1436,11 @@
       }
     }
     y += 8;
-    A.drawSprite(ctx, A.slipperSprite(46), -w / 2 + 64, y, -0.4);
-    ui.text(ctx, 'Terlik yiyenler: ' + sm.hitKids + ' kişi · toplam ' + sm.hits + ' terlik', -w / 2 + 100, y + 2, { size: 30, align: 'left', color: '#ffb3c1', maxWidth: w - 140 });
-    y += 48;
+    if (sm.hits > 0) {
+      A.drawSprite(ctx, A.slipperSprite(46), -w / 2 + 64, y, -0.4);
+      ui.text(ctx, 'Terlik yiyenler: ' + sm.hitKids + ' kişi · toplam ' + sm.hits + ' terlik', -w / 2 + 100, y + 2, { size: 30, align: 'left', color: '#ffb3c1', maxWidth: w - 140 });
+      y += 48;
+    }
     if (sm.top) {
       ui.text(ctx, '🤕 En çok terlik yiyen: ' + sm.top.name + ' (' + sm.topN + ')', -w / 2 + 40, y, { size: 30, align: 'left', color: '#fff', maxWidth: w - 80 });
     } else {

@@ -244,7 +244,7 @@
     for (i = 0; i < S.queue.length && free > cap; ) {
       if (S.queue[i].o.free) { S.queue.splice(i, 1); free--; } else i++;
     }
-    if (S.queue.length >= 4) note('🎗️', fmt(T.waiting, { n: S.queue.length }), '#ffd166');
+    if (S.queue.length >= 4) note('⏳', fmt(T.waiting, { n: S.queue.length }), '#ffd166');
   }
   function flushPress() {
     if (!press) return;
@@ -264,7 +264,7 @@
     flushPress();
     S.st = 'leave'; S.t = 0;
     LG.sfx('whoosh'); LG.sfx('boing');
-    note('😅', T.kicked, '#fff');
+    note('🛼', T.kicked, '#fff');
   }
   function makeSplats(color) {
     var t0 = now();
@@ -473,12 +473,12 @@
     var slot = stickerSlot++ % STICKER_SLOTS.length, sl = STICKER_SLOTS[slot];
     for (var i = stickers.length - 1; i >= 0; i--) if (stickers[i].slot === slot || stickers[i].u === u) stickers.splice(i, 1);
     stickers.push({ u: u, x: sl[0], y: sl[1], rot: LG.rand(-0.25, 0.25), t: now(), slot: slot });
-    note('💖', fmt(T.followed, { name: u.name }), '#ff8fb8');
+    note('➕', fmt(T.followed, { name: u.name }), '#ff8fb8');
     LG.sfx('heart');
   });
   LG.on('share', function (e) {
     if (!e.user) return;
-    note('📣', fmt(T.shared, { name: e.user.name }), '#7fd8ff');
+    note('↗️', fmt(T.shared, { name: e.user.name }), '#7fd8ff');
     LG.sfx('honk');
   });
 
@@ -487,7 +487,7 @@
     if (S.st === 'play') kickFruit();
     else if (S.st === 'result') startSweep();
   });
-  LG.onKey('b', 'Şimdi patlat! (final)', function () { if (S.st === 'play') startCritical(S.lastUser); });
+  LG.onKey('b', 'Şimdi patlat! (final)', function () { if (S.st === 'play' && S.units > 0) startCritical(S.lastUser); });
   LG.onKey('t', 'Gerilim: sarsıntı + çatırtı', function () { tease(); });
 
   // ---------------------------------------------------------------------------
@@ -828,10 +828,10 @@
     }
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     for (var k = 1; k < 4; k++) ctx.fillRect(x + w * k / 4 - 1.5, y + 10, 3, h - 20);
-    var lvl = done ? T.burstLevel : T.levels[pv < 0.4 ? 0 : pv < 0.65 ? 1 : pv < 0.85 ? 2 : 3];
-    ui.text(ctx, T.tension + ' %' + Math.round(pv * 100) + '  ·  ' + lvl, x + w / 2, y + h / 2 + 2, { size: 31, maxWidth: w - 140 });
     var hx = x + 5 + max(h / 2, fw);
-    ui.emoji(ctx, S.F.emoji, min(x + w - 26, hx), y + h / 2 + sin(t * 10) * (danger ? 4 : 1.5), 50 + (danger ? 6 * sin(t * 20) : 0));
+    ui.emoji(ctx, S.F.emoji, min(x + w - 26, hx), y + h / 2 + sin(t * 10) * (danger ? 4 : 1.5), 48 + (danger ? 6 * sin(t * 20) : 0), 0.9);
+    var lvl = done ? T.burstLevel : T.levels[pv < 0.4 ? 0 : pv < 0.65 ? 1 : pv < 0.85 ? 2 : 3];
+    ui.text(ctx, T.tension + ' %' + Math.round(pv * 100) + '  ·  ' + lvl, x + w / 2, y + h / 2 + 2, { size: 31, maxWidth: w - 140, strokeWidth: 7 });
     ctx.restore();
   }
 

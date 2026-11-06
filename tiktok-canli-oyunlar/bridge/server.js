@@ -90,6 +90,18 @@ wss.on('connection', (ws) => {
     let m;
     try { m = JSON.parse(String(raw)); } catch (e) { return; }
     if (!m || m.type !== 'control') return;
+    if (m.action === 'highlight') {
+      // Klip anı: yayın başından itibaren geçen süreyi kaydet (TikTok'un yayın tekrarında bu dakikaya git)
+      if (!sess) newSession();
+      const sec = Math.round((Date.now() - new Date(sess.baslangic)) / 1000);
+      const stamp = `${String(Math.floor(sec / 3600)).padStart(2, '0')}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+      try {
+        fs.mkdirSync(SESS_DIR, { recursive: true });
+        fs.appendFileSync(path.join(SESS_DIR, sess.id + '-klipler.txt'), `${stamp}  ${m.note || 'klip anı'}\n`);
+      } catch (e) { /* yok say */ }
+      console.log(`⭐ Klip anı işaretlendi: ${stamp}`);
+      return;
+    }
     const msg = JSON.stringify(m);
     for (const c of wss.clients) if (c !== ws && c.readyState === 1) c.send(msg);
   });
