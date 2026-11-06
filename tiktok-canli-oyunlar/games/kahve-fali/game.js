@@ -10,8 +10,9 @@
  *   Hediye : 1. kademe lokum serpme; 2–3 altın fincan (öncelikli); 4+ büyük açılım;
  *            5+ masa parlar, konfeti
  *   Takip  : lambaya isimli nazar boncuğu; Paylaşım: bildirim
- * Kısayollar: N sıradaki, R son falı tekrar, C sırayı temizle, F hızlı mod,
- *             B kartı beklet, K köpüklü kahve
+ *   Boş masa: 30 sn kimse yazmazsa "Masanın Falı" okunur (yeni gelen ritüeli görsün)
+ * Kısayollar: N sıradaki (sıra boşsa masanın falı), R son falı tekrar, C sırayı temizle,
+ *             F hızlı mod, B kartı beklet, K köpüklü kahve
  */
 (function () {
   'use strict';
@@ -41,10 +42,26 @@
   var TICK_Y = 381;
   var NEXT_PILL_Y = 1153;
 
+  // Eller kamerası üstte ise (?cam=tr / ?cam=tl): başlık, şerit, isim, sıra paneli ve
+  // boncuklar kameranın olmadığı tarafa kayar; fal kartı biraz küçülüp kameranın altına iner.
+  var CAMTOP = LG.CAM && LG.CAM.y < 600 ? (LG.CAM.x > CX ? 'tr' : 'tl') : '';
+  var LAYOUT = { titleX: CX, titleS: 1, tickX: CX, tickMaxW: 640, bannerX: 58, bannerW: W - 116, nameX: CX, beadMax: 4, beadTop: 0, overlayS: 1, overlayY: 354 };
+  if (CAMTOP === 'tr') {
+    LAYOUT.titleX = 430; LAYOUT.titleS = 0.8; LAYOUT.tickX = 370; LAYOUT.bannerX = 44; LAYOUT.bannerW = 640; LAYOUT.nameX = 500;
+    LAYOUT.overlayS = 0.78; LAYOUT.overlayY = 512;
+    PANEL.y = 508; PANEL.h = 398;
+  } else if (CAMTOP === 'tl') {
+    LAYOUT.titleX = 650; LAYOUT.titleS = 0.8; LAYOUT.tickX = 700; LAYOUT.tickMaxW = 600; LAYOUT.bannerX = 396; LAYOUT.bannerW = 640; LAYOUT.nameX = 580;
+    LAYOUT.overlayS = 0.78; LAYOUT.overlayY = 512;
+    LAYOUT.beadMax = 3; LAYOUT.beadTop = LG.CAM.y + LG.CAM.h + 8;
+  }
+
+  // "fal yaz" en önemli ipucu: döngüde iki kez geçer
   var HINTS = [
-    '💬 fal yaz → fincanın gelsin',
-    '💘 aşk / 💰 para yaz → konuyu seç',
+    '💬 fal yaz → fincanın masaya gelsin',
+    '💘 aşk / 💰 para / 📚 okul yaz → konuyu seç',
     '❤️ Beğen → köpüklü kahve',
+    '💬 fal yaz → fincanın masaya gelsin',
     '🎯 doğru / yalan yaz → falı oyla',
     '🎁 Hediye → altın fincan / büyük açılım',
     '➕ Takip → lambaya nazar boncuğu 🧿',
@@ -77,9 +94,15 @@
   var bubbles = [];           // cezveden yükselen köpük kabarcıkları
   var poofs = [];             // buhar bulutları
   var banners = [], banner = null; // hediye teşekkür şeridi
+  var titleGap = 0;                // şeritler arasında başlık en az bu kadar görünür (küçük hediyeler için)
   var tickQ = [], tick = null;      // bildirim şeridi
+  var arrivals = [];                // kart açıkken sıraya girenler (alt şeritte isim çipleri)
+  var pillBump = 0, pillW = 0, activePing = -9;
   var lastLikeFloat = 0, lastChatFloat = 0, lastPop = 0, lastVoteFx = 0, lastReact = 0;
   var dupNotice = new Map();
+  // Boş masada (kimse fal istemezken) ritüeli göstermek için "Masanın Falı" okunur
+  var HOUSE = { id: '__masa', name: 'Masanın Falı', hue: 28, color: 'hsl(28,75%,55%)', emoji: '🔮', avatar: '', data: {} };
+  var idleT = 0;
 
   function brewDur(e) { return e.gold ? 3.5 : fast ? 4.5 : 9; }
   function D(normal, quick) { return fast || Q.length > 12 ? quick : normal; }
@@ -573,46 +596,58 @@
   }
   function slotPos(i) { return SLOTS[i]; }
   function tokenTarget(idx) {
-    if (overlayOn()) return { x: CX, y: NEXT_PILL_Y };
     if (idx < SLOTS.length) return { x: SLOTS[idx].x, y: SLOTS[idx].y - 30 };
     return { x: PANEL.x + PANEL.w / 2, y: PANEL.y + 92 };
   }
-  function addToken(u, label, idx, gold) {
+  function addToken(u, label, idx, gold, target) {
     if (tokens.length >= 14) return;
-    var tg = tokenTarget(idx);
-    var low = overlayOn();
-    tokens.push({ user: u, tag: { id: u.id + '#tk' + label, name: label }, x0: LG.rand(260, 820), y0: 1290, x1: tg.x, y1: tg.y, t: 0, dur: 0.85, gold: gold, arc: low ? 30 : 140, fadeAt: idx >= SLOTS.length ? 0.6 : 0.85 });
+    var tg = target || tokenTarget(idx);
+    tokens.push({ user: u, tag: { id: u.id + '#tk' + label, name: label }, x0: LG.rand(260, 820), y0: 1270, x1: tg.x, y1: tg.y, t: 0, dur: 0.85, gold: gold, arc: 140, fadeAt: idx >= SLOTS.length ? 0.6 : 0.85 });
+  }
+  // Kart/ekspres açıkken: isim, alt şeritte (sıra sayacının yanında) çip olarak belirir
+  function addArrival(u, label) {
+    for (var i = arrivals.length - 1; i >= 0; i--) if (arrivals[i].user.id === u.id) arrivals.splice(i, 1);
+    arrivals.unshift({ user: u, tag: { id: u.id + '#ar' + label, name: shortUser(u, 11).name + ' ' + label }, t: LG.time });
+    if (arrivals.length > 3) arrivals.length = 3;
+    pillBump = 1;
+  }
+  // Yeni giriş / sıra hatırlatma / konu değişimi için tek geri bildirim yolu:
+  // görünen fincan zıplar, görünmeyen sıradakiler için isim panele uçar, kart açıkken alt şeritte çip çıkar.
+  function feedback(u, e, label, newEntry) {
+    var idx = posOf(e);
+    if (overlayOn()) { addArrival(u, label); return; }
+    if (!newEntry && e.cup && idx < SLOTS.length) { e.ping = LG.time; return; }
+    var target = null;
+    if (newEntry && idx === 0 && !active && st.name === 'idle') target = { x: LAYOUT.nameX, y: 500 }; // doğrudan masaya
+    addToken(u, shortUser(u, 12).name + ' · ' + label, idx, !!e.gold, target);
   }
 
   function enqueue(u, topic) {
     if (active && active.user.id === u.id && st.name !== 'out') {
-      if (topic && st.name !== 'card') active.topic = topic;
-      notice(u, '☕ falın şu an okunuyor!');
+      if (topic && ['move', 'brew', 'swirl'].indexOf(st.name) >= 0) active.topic = topic;
+      activePing = LG.time;
       return;
     }
     var e = inQueue.get(u.id);
     if (e) {
+      var last = dupNotice.get(u.id) || -99;
       if (topic && topic !== e.topic) {
         e.topic = topic;
-        ui.float(DATA.TOPICS[topic].icon + ' ' + DATA.TOPICS[topic].label, e.cup ? e.cup.x : PANEL.x + PANEL.w / 2, e.cup ? e.cup.y - 80 : PANEL.y + 140, { size: 28, color: '#ffe0b0', life: 1.4, vy: -50 });
-      } else notice(u, '☕ ' + (posOf(e) + 1) + '. sıradasın');
+        feedback(u, e, DATA.TOPICS[topic].icon, false);
+      } else if (LG.time - last > 3) {
+        dupNotice.set(u.id, LG.time);
+        if (dupNotice.size > 1500) dupNotice.clear();
+        feedback(u, e, (posOf(e) + 1) + '.', false);
+      }
       return;
     }
     e = makeEntry(u, topic);
     var idx = insertByPriority(e);
     inQueue.set(u.id, e);
     panelBump = 1;
-    addToken(u, shortUser(u, 12).name + ' · ' + (idx + 1) + '.', idx, false);
+    feedback(u, e, (idx + 1) + '.', true);
     var now = LG.time;
     if (now - lastPop > 0.12) { LG.sfx('pop'); lastPop = now; }
-  }
-
-  function notice(u, text) {
-    var last = dupNotice.get(u.id) || -99;
-    if (LG.time - last < 4) return;
-    dupNotice.set(u.id, LG.time);
-    if (dupNotice.size > 1500) dupNotice.clear();
-    ui.float(shortUser(u, 12).name + ' ' + text, LG.rand(330, 750), NEXT_PILL_Y - 20, { size: 28, color: '#ffe6c4', life: 1.6, vy: -70 });
   }
 
   function upgrade(u, level, mega, topic) {
@@ -630,14 +665,16 @@
       } else if (level > e.gold) e.gold = level;
       e.mega = e.mega || mega;
       if (topic) e.topic = topic;
+      panelBump = 1;
+      feedback(u, e, level >= 2 ? '🔮' : '👑', false);
       return e;
     }
     e = makeEntry(u, topic);
     e.gold = level; e.mega = mega; e.gseq = ++goldSeq;
-    var idx = insertByPriority(e);
+    insertByPriority(e);
     inQueue.set(u.id, e);
     panelBump = 1;
-    addToken(u, shortUser(u, 12).name + ' · 👑', idx, true);
+    feedback(u, e, level >= 2 ? '🔮' : '👑', true);
     return e;
   }
 
@@ -680,8 +717,21 @@
     return !!replay || st.name === 'lift' || st.name === 'card' || st.name === 'out' || st.name === 'express' || st.name === 'expout';
   }
 
+  function startHouse() {
+    idleT = 0;
+    active = makeEntry(HOUSE, 'genel');
+    active.band = '#c0392b';
+    active.brew = 1;
+    active.from = { x: CX, y: CENTER.y, s: CENTER.s };
+    active.drip = 0;
+    go('swirl');
+    LG.sfx('whoosh');
+    tickerAdd('🔮', null, 'Masa boş kalmasın — masanın falına bakalım!');
+  }
+
   function startNext() {
     if (!Q.length) return;
+    idleT = 0;
     if (shouldExpress()) return startExpress();
     // Adalet: arka arkaya 2 altın fincandan sonra bekleyen normal bir fincan okunur
     var pick = 0;
@@ -709,7 +759,7 @@
       if (e.cup) addPoof(e.cup.x, e.cup.y - 40, 0.8);
     });
     exp = {
-      t: 0, dur: D(10, 8), kopuk: kopukT > 0, popped: 0,
+      t: 0, dur: D(12, 10), kopuk: kopukT > 0, popped: 0,
       items: picks.map(function (e) { var f = GEN.express(); return { user: e.user, sym: f.sym, text: f.text, topic: e.topic }; }),
     };
     sinceExpress = 0;
@@ -730,9 +780,10 @@
     } else {
       var f = GEN.fortune(e.topic);
       c.sym = f.sym; c.text = f.text;
-      c.dur = D(9, 6.5);
+      c.dur = e.user === HOUSE ? 7 : D(9, 6.5);
     }
     c.sub = c.kopuk ? GEN.kopuk() : kind !== 'normal' ? GEN.altin() : '';
+    if (e.user === HOUSE) c.sub = '💬 fal yaz, sıradaki fincan senin!';
     return c;
   }
 
@@ -758,7 +809,7 @@
   function finishReading() {
     if (card) {
       lastShown = { card: card };
-      readToday++; readTotal++;
+      if (card.user !== HOUSE) { readToday++; readTotal++; }
       LG.store.set('kahve-fali:toplam', readTotal);
     }
     addPoof(CENTER.x, CENTER.y - 60, 1.4);
@@ -770,6 +821,7 @@
     switch (st.name) {
       case 'idle':
         if (Q.length) startNext();
+        else if (!replay && (idleT += dt) > 30) startHouse();
         break;
       case 'move':
         if (st.t >= DUR.move()) go(active.brew >= 1 ? 'swirl' : 'brew');
@@ -833,7 +885,8 @@
     var u = e.user;
     var words = e.norm ? e.norm.split(' ') : [];
     var topic = topicOf(words);
-    var fal = wantsFal(words) || (topic && words.length <= 4);
+    // Sadece konu kelimesi ("aşk", "para", "sınav") yazan da sıraya girer; İngilizce "is" buna sayılmaz
+    var fal = wantsFal(words) || (topic && words.length <= 3 && topicOf(words.filter(function (w) { return w !== 'is'; })));
     // Okunan fala oy / tepki
     var c = cardShowing() ? (replay && replay.card ? replay.card : card) : null;
     var reacted = false;
@@ -845,7 +898,8 @@
         c.lastVoter = { name: shortUser(u, 11).name, yes: yes, t: LG.time };
         if (LG.time - lastVoteFx > 0.12) {
           lastVoteFx = LG.time;
-          ui.burst(yes ? CARD.x + 70 : CARD.x + 250, CARD.y + CARD.h - 70, { count: 1, shape: 'emoji', emoji: yes ? '🎯' : '🙈', speed: 120, size: 13, gravity: -260, life: 0.9, up: 1 });
+          // kartın kenarlarından yükselir (yazının üstüne binmez)
+          ui.burst(yes ? CARD.x - 4 + LG.rand(-14, 14) : CARD.x + CARD.w + 4 + LG.rand(-14, 14), CARD.y + CARD.h - 40, { count: 1, shape: 'emoji', emoji: yes ? '🎯' : '🙈', speed: 40, size: 14, gravity: -300, life: 1.1, up: 1 });
         }
         reacted = true;
       }
@@ -875,7 +929,14 @@
     for (var i = 0; i < n && bubbles.length < 60; i++) {
       bubbles.push({ x: CEZVE.x + LG.rand(-34, 34), y: CEZVE.y - 120, vy: LG.rand(-70, -140), vx: LG.rand(-20, 20), r: LG.rand(4, 10), t: 0, life: LG.rand(0.9, 1.6) });
     }
-    if (LG.time - lastLikeFloat > 0.7) {
+    if (overlayOn()) {
+      // kart açıkken: kalpler kartın kenarlarından süzülür (isimsiz, yazıyı kapatmaz)
+      if (LG.time - lastLikeFloat > 0.18) {
+        lastLikeFloat = LG.time;
+        var lx = Math.random() < 0.5 ? LG.rand(56, 92) : LG.rand(988, 1024);
+        ui.burst(lx, LG.rand(900, 1080), { count: 1, shape: 'emoji', emoji: LG.pick(['❤️', '🤎', '🫧']), speed: 30, size: 13, gravity: -260, life: 1.4, up: 1 });
+      }
+    } else if (LG.time - lastLikeFloat > 0.7) {
       lastLikeFloat = LG.time;
       ui.float('❤️ ' + shortUser(e.user, 10).name, CEZVE.x + LG.rand(-30, 40), CEZVE.y - 190, { size: 24, color: '#ffd6e0', life: 1.3, vy: -70 });
     }
@@ -954,8 +1015,9 @@
       }
     }
     if (merged) { /* sayaç güncellendi */ }
-    else if (tier <= 3 && banners.length >= 3) {
-      tickerAdd('👑', u, 'altın fincan · teşekkürler! 💛', '#ffd166');
+    else if (tier <= 3 && (banner || banners.length)) {
+      // başlık sürekli kapanmasın: küçük/orta hediyeler şerit doluyken alt bildirimle teşekkür alır
+      tickerAdd(coffee ? '☕' : '👑', u, gName + ' · altın fincan · teşekkürler! 💛', '#ffd166');
     } else {
       if (banners.length > 5) banners.shift();
       banners.push({ user: u, giftName: g.name, combo: g.count, text: u.name + ' · ' + gName, sub: sub, tier: tier, emoji: coffee ? '☕' : LG.giftEmoji(g), t: 0, dur: tier >= 5 ? 5.5 : tier >= 4 ? 4.2 : 2.8 });
@@ -978,7 +1040,7 @@
   LG.on('follow', function (e) {
     for (var i = beads.length - 1; i >= 0; i--) if (beads[i].user.id === e.user.id) beads.splice(i, 1);
     beads.unshift({ user: e.user, t: 0 });
-    if (beads.length > 4) beads.length = 4;
+    if (beads.length > LAYOUT.beadMax) beads.length = LAYOUT.beadMax;
     LG.sfx('heart');
     tickerAdd('🧿', e.user, 'takip etti · nazar boncuğu asıldı', '#a8d8ff');
   });
@@ -995,10 +1057,10 @@
   // ---------------------------------------------------------------------------
   // Sunucu kısayolları
   // ---------------------------------------------------------------------------
-  LG.onKey('n', 'Sıradaki fincanı hemen oku / kartı geç', function () {
+  LG.onKey('n', 'Sıradaki fincanı hemen oku / kartı geç (sıra boşsa masanın falı)', function () {
     if (replay) { replay = null; return; }
     switch (st.name) {
-      case 'idle': if (Q.length) startNext(); else tickerAdd('☕', null, 'Sıra boş — "fal" yazan ilk kişi gelsin!'); break;
+      case 'idle': if (Q.length) startNext(); else startHouse(); break;
       case 'move': case 'brew': case 'swirl': case 'flip': case 'cool':
         active.brew = 1; go('lift'); card = buildCard(active); revealFx(card); break;
       case 'lift': go('card'); break;
@@ -1073,8 +1135,10 @@
     for (i = poofs.length - 1; i >= 0; i--) { poofs[i].t += dt; if (poofs[i].t > 1.1) poofs.splice(i, 1); }
 
     // Hediye şeridi
-    if (!banner && banners.length) { banner = banners.shift(); banner.t = 0; }
-    if (banner) { banner.t += dt; if (banner.t >= banner.dur) banner = null; }
+    if (!banner && banners.length && (titleGap <= 0 || banners[0].tier >= 4)) { banner = banners.shift(); banner.t = 0; }
+    if (banner) { banner.t += dt; if (banner.t >= banner.dur) { banner = null; titleGap = 2.5; } }
+    else if (titleGap > 0) titleGap -= dt;
+    if (pillBump > 0) pillBump = Math.max(0, pillBump - dt * 4);
     // Bildirim şeridi
     if (!tick && tickQ.length) { tick = tickQ.shift(); tick.t = 0; tick.dur = tickQ.length > 1 ? 1.7 : 2.8; }
     if (tick) { tick.t += dt; if (tick.t >= tick.dur) tick = null; }
@@ -1126,7 +1190,7 @@
     ctx.beginPath(); ctx.arc(0, 86, 5, 0, TAU); ctx.fill();
     ctx.restore();
     // nazar boncukları
-    var top = gy + 100;
+    var top = Math.max(gy + 100, LAYOUT.beadTop - 40);
     if (beads.length) {
       var last = 0;
       for (var i = 0; i < beads.length; i++) {
@@ -1142,7 +1206,7 @@
         ctx.beginPath(); ctx.moveTo(i === 0 ? sx(top) : sx(by - 54), i === 0 ? top : by - 54 + 18); ctx.lineTo(bx, by - 17); ctx.stroke();
         ctx.drawImage(beadCanvas, bx - 22, by - 22);
         var tg = ui.nameTag(shortUser(bd.user, 11), 23, '#e8f3ff', 'rgba(10,30,80,0.72)');
-        var a = Math.min(1, bd.t * 3) * (i === 3 ? 0.75 : 1);
+        var a = Math.min(1, bd.t * 3) * (i === 3 ? 0.8 : 1);
         ctx.save(); ctx.globalAlpha = a;
         ctx.drawImage(tg, bx + 22, by - tg.height / 2);
         ctx.restore();
@@ -1238,7 +1302,16 @@
       var e = Q[i], c = e.cup;
       if (!c) continue;
       var s = LG.ease.outBack(c.a);
+      // "fal" tekrar yazıldı / konu seçildi: fincan zıplar, halka yayılır, etiket büyür
+      var pg = e.ping ? LG.time - e.ping : 9;
+      var hop = pg < 0.5 ? Math.sin(pg / 0.5 * Math.PI) * 16 : 0;
+      if (pg < 0.9) {
+        var pk = pg / 0.9;
+        ctx.save(); ctx.globalAlpha = 1 - pk; ctx.strokeStyle = e.gold ? '#ffd166' : '#ffe3a6'; ctx.lineWidth = 6 * (1 - pk) + 1;
+        ctx.beginPath(); ctx.ellipse(c.x, c.y - 4, 66 + pk * 44, 24 + pk * 18, 0, 0, TAU); ctx.stroke(); ctx.restore();
+      }
       ctx.save();
+      ctx.translate(0, -hop);
       if (c.a < 1) ctx.globalAlpha = c.a;
       if (e.gold) {
         var gl = ctx.createRadialGradient(c.x, c.y - 30, 10, c.x, c.y - 30, 95);
@@ -1257,9 +1330,11 @@
       ctx.strokeStyle = e.gold ? '#fff2b0' : '#e8c79a'; ctx.lineWidth = 2.5; ctx.stroke();
       ui.text(ctx, String(i + 1), c.x - 62, c.y - 32, { size: 22, color: e.gold ? '#3a1c0a' : '#ffe6c4', stroke: false });
       if (e.gold) ui.emoji(ctx, e.gold >= 2 ? '🔮' : '👑', c.x, c.y - 92 + Math.sin(t * 3 + i) * 4, 30);
-      if (e.topic !== 'genel') ui.emoji(ctx, DATA.TOPICS[e.topic].icon, c.x + 54, c.y - 62, 26);
+      if (e.topic !== 'genel') ui.emoji(ctx, DATA.TOPICS[e.topic].icon, c.x + 54, c.y - 62, pg < 0.5 ? 26 + hop * 1.2 : 26);
       ctx.restore();
-      ui.drawNameTag(ctx, shortUser(e.user, 12), c.x, c.y + 42, 23, e.gold ? '#3a1c0a' : '#fff3e0', e.gold ? 'rgba(255,209,102,0.95)' : 'rgba(30,12,2,0.78)');
+      var tag = ui.nameTag(shortUser(e.user, 12), 23, e.gold ? '#3a1c0a' : pg < 0.9 ? '#3a1c0a' : '#fff3e0', e.gold || pg < 0.9 ? 'rgba(255,209,102,0.95)' : 'rgba(30,12,2,0.78)');
+      var ts = pg < 0.5 ? 1 + 0.28 * Math.sin(pg / 0.5 * Math.PI) : 1;
+      ctx.drawImage(tag, Math.round(c.x - tag.width * ts / 2), Math.round(c.y + 42 - tag.height * ts / 2), tag.width * ts, tag.height * ts);
     }
   }
 
@@ -1317,12 +1392,21 @@
     if (name !== 'out' && name !== 'card') {
       var lbA = name === 'move' ? clamp01(st.t / 0.4) : 1;
       ctx.save(); ctx.globalAlpha = lbA;
-      var tg = ui.nameTag(shortUser(e.user, 14), 40, gold ? '#3a1c0a' : '#fff3e0', gold ? 'rgba(255,209,102,0.96)' : 'rgba(30,12,2,0.82)');
-      var tw = tg.width + 70;
-      ui.panel(ctx, CX - tw / 2, 430, tw, 66, { r: 33, fill: gold ? 'rgba(255,209,102,0.96)' : 'rgba(30,12,2,0.82)', border: gold ? '#fff2b0' : 'rgba(255,220,170,0.5)', lineWidth: 3 });
-      ui.avatar(ctx, e.user, CX - tw / 2 + 36, 463, 26, { ringWidth: 3, ring: gold ? '#fff' : '#e8c79a' });
-      ctx.drawImage(tg, CX - tw / 2 + 64, 463 - tg.height / 2);
-      if (e.topic !== 'genel') ui.text(ctx, DATA.TOPICS[e.topic].icon + ' ' + DATA.TOPICS[e.topic].label, CX, 518, { size: 26, color: '#ffe0b0', stroke: false });
+      var tg = ui.nameTag(shortUser(e.user, CAMTOP ? 11 : 14), 40, gold ? '#3a1c0a' : '#fff3e0', gold ? 'rgba(255,209,102,0.96)' : 'rgba(30,12,2,0.82)');
+      var tw = tg.width + 70, NX = LAYOUT.nameX;
+      var ap = LG.time - activePing, aps = ap < 0.45 ? 1 + 0.12 * Math.sin(ap / 0.45 * Math.PI) : 1;
+      ctx.save(); ctx.translate(NX, 463); ctx.scale(aps, aps); ctx.translate(-NX, -463);
+      ui.panel(ctx, NX - tw / 2, 430, tw, 66, { r: 33, fill: gold ? 'rgba(255,209,102,0.96)' : 'rgba(30,12,2,0.82)', border: gold ? '#fff2b0' : 'rgba(255,220,170,0.5)', lineWidth: 3 });
+      ui.avatar(ctx, e.user, NX - tw / 2 + 36, 463, 26, { ringWidth: 3, ring: gold ? '#fff' : '#e8c79a' });
+      ctx.drawImage(tg, NX - tw / 2 + 64, 463 - tg.height / 2);
+      ctx.restore();
+      if (e.topic !== 'genel') {
+        var tl = DATA.TOPICS[e.topic].icon + ' ' + DATA.TOPICS[e.topic].label;
+        ctx.font = ui.font(25, 800);
+        var tlw = ctx.measureText(tl).width + 36;
+        ui.panel(ctx, NX - tlw / 2, 503, tlw, 38, { r: 19, fill: 'rgba(120,40,60,0.88)', border: 'rgba(255,200,210,0.6)', lineWidth: 2 });
+        ui.text(ctx, tl, NX, 523, { size: 25, color: '#fff0f3', stroke: false });
+      }
       var stTxt;
       if (name === 'move') stTxt = gold ? '👑 Altın fincan geliyor…' : '☕ Fincan masaya geliyor…';
       else if (name === 'brew') stTxt = '☕ Demleniyor %' + Math.floor(e.brew * 100) + ' · Niyet tut 🙏';
@@ -1353,17 +1437,19 @@
       ui.text(ctx, 'Henüz kimse yok', cx, p.y + 220, { size: 24, color: 'rgba(255,240,220,0.75)', stroke: false });
       ui.text(ctx, 'İlk fincan senin!', cx, p.y + 254, { size: 26, color: '#ffd166', stroke: false });
     }
-    for (var i = 0; i < Math.min(5, Q.length); i++) {
+    var compact = p.h < 450, rowsN = compact ? 3 : 5;
+    for (var i = 0; i < Math.min(rowsN, Q.length); i++) {
       var e = Q[i], ry = p.y + 202 + i * 42;
       if (e.gold) ui.emoji(ctx, e.gold >= 2 ? '🔮' : '👑', p.x + 26, ry, 24);
       else ui.text(ctx, String(i + 1), p.x + 26, ry + 1, { size: 24, color: '#ffd166', stroke: false });
       ui.avatar(ctx, e.user, p.x + 60, ry, 17, { ringWidth: 2.5, ring: e.gold ? '#ffd166' : '#e8c79a' });
       ui.text(ctx, shortUser(e.user, 12).name, p.x + 84, ry + 1, { size: 25, align: 'left', maxWidth: p.w - 98, color: e.gold ? '#ffd166' : '#fff3e0', stroke: false });
     }
-    if (Q.length > 5) ui.text(ctx, '+' + LG.fmt(Q.length - 5) + ' kişi daha', cx, p.y + 404, { size: 22, color: 'rgba(255,230,200,0.75)', stroke: false });
-    ctx.fillStyle = 'rgba(255,210,150,0.3)'; ctx.fillRect(p.x + 18, p.y + 424, p.w - 36, 2);
-    ui.text(ctx, '🔮 Bugün: ' + LG.fmt(readToday) + ' fal', cx, p.y + 448, { size: 23, color: '#ffe6c4', stroke: false, maxWidth: p.w - 24 });
-    ui.text(ctx, '💬 fal yaz → sıraya gir', cx, p.y + 474, { size: 21, color: '#ffd166', stroke: false, maxWidth: p.w - 20 });
+    var by = p.y + 202 + rowsN * 42 - 8;
+    if (Q.length > rowsN) ui.text(ctx, '+' + LG.fmt(Q.length - rowsN) + ' kişi daha', cx, by, { size: 22, color: 'rgba(255,230,200,0.75)', stroke: false });
+    ctx.fillStyle = 'rgba(255,210,150,0.3)'; ctx.fillRect(p.x + 18, p.y + p.h - 66, p.w - 36, 2);
+    ui.text(ctx, '🔮 Bugün: ' + LG.fmt(readToday) + ' fal', cx, p.y + p.h - 42, { size: 23, color: '#ffe6c4', stroke: false, maxWidth: p.w - 24 });
+    ui.text(ctx, '💬 fal yaz → sıraya gir', cx, p.y + p.h - 16, { size: 21, color: '#ffd166', stroke: false, maxWidth: p.w - 20 });
   }
 
   function drawTokens(ctx) {
@@ -1459,6 +1545,21 @@
     ui.text(ctx, text, cx, y + 2, { size: 34, color: kind !== 'normal' ? '#3a1c0a' : kopuk ? '#5a3010' : '#fff3e0', stroke: false, weight: 900 });
   }
 
+  // Köpüklü fal rozeti: "ŞANS ×2"
+  function luckyBadge(ctx, x, y, ct, t) {
+    var p = LG.ease.outBack(clamp01((ct - 0.9) / 0.4));
+    if (p <= 0) return;
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(0.18 + Math.sin(t * 2.5) * 0.05); ctx.scale(p, p);
+    ctx.fillStyle = '#fff8ec';
+    for (var i = 0; i < 12; i++) { var a = i / 12 * TAU; ctx.beginPath(); ctx.arc(Math.cos(a) * 46, Math.sin(a) * 46, 14, 0, TAU); ctx.fill(); }
+    ctx.beginPath(); ctx.arc(0, 0, 50, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#d4a017'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 44, 0, TAU); ctx.stroke();
+    ui.text(ctx, 'KISMET', 0, -12, { size: 21, color: '#8a5228', stroke: false, weight: 900 });
+    ui.text(ctx, '×2 ✨', 0, 16, { size: 26, color: '#b8860b', stroke: false, weight: 900 });
+    ctx.restore();
+  }
+
   function sparkles(ctx, x, y, w, h, n, t) {
     for (var i = 0; i < n; i++) {
       var sx = x + ((i * 137.5) % w), sy = y + ((i * 91.3) % h);
@@ -1472,7 +1573,7 @@
 
   function header(ctx, c, y) {
     var x0 = CARD.x + 56;
-    ui.avatar(ctx, c.user, x0 + 40, y + 40, 52, { ring: c.kind !== 'normal' ? '#d4a017' : '#7a4a22', ringWidth: 5 });
+    ui.avatar(ctx, c.user, x0 + 40, y + 40, 52, { ring: c.kind !== 'normal' || c.kopuk ? '#d4a017' : '#7a4a22', ringWidth: 5 });
     ui.text(ctx, c.user.name, x0 + 110, y + 22, { size: 48, align: 'left', color: '#3a1c0a', stroke: false, maxWidth: CARD.w - 220, weight: 900 });
     var tp = DATA.TOPICS[c.topic] || DATA.TOPICS.genel;
     var sub = c.kind === 'big' ? '🔮 Geçmiş · Şimdi · Gelecek' : tp.icon + ' ' + tp.label;
@@ -1515,7 +1616,7 @@
       for (var r = 0; r < 14; r++) { ctx.rotate(TAU / 14); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-60, -720); ctx.lineTo(60, -720); ctx.closePath(); ctx.fill(); }
       ctx.restore();
     }
-    paper(ctx, x, y, w, h, c.kind, c.kopuk);
+    paper(ctx, x, y, w, h, c.kind === 'normal' && !c.kopuk ? 'normal' : 'gold', c.kopuk);   // köpüklü fal da altın çerçeveli
     var rib = big ? '🔮 BÜYÜK AÇILIM' : c.kind === 'gold' ? '👑 ALTIN FİNCAN' : c.kopuk ? '✨ KÖPÜKLÜ FAL ✨' : '☕ FALIN HAZIR';
     if (isReplay) rib = '🔁 ' + rib;
     ribbon(ctx, rib, CX, y, c.kind, c.kopuk);
@@ -1545,6 +1646,7 @@
       if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '6px';
       ui.text(ctx, c.sym.ad, CX, my + 124, { size: 42, color: '#6b3a16', stroke: false, weight: 900 });
       if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '0px';
+      if (c.kopuk) luckyBadge(ctx, CX + 168, my - 44, ct, t);
       // fal metni (daktilo) — en fazla ~6 satır, sığmazsa yazı küçülür
       if (!c.lines) {
         var fonts = [[37, 46, 110], [34, 42, 96], [31, 38, 86]];
@@ -1568,7 +1670,7 @@
       ctx.restore();
     }
     footer(ctx, c, y + h - 62, clamp01(ct / c.dur));
-    if (c.kind !== 'normal' || c.kopuk) sparkles(ctx, x, y, w, h, c.kind !== 'normal' ? 16 : 10, t);
+    if (c.kind !== 'normal' || c.kopuk) sparkles(ctx, x, y, w, h, c.kind !== 'normal' ? 16 : 13, t);
     ctx.restore();
   }
 
@@ -1603,10 +1705,15 @@
         ctx.drawImage(groundsCanvas, x + cw / 2 - 72, cy + 76, 144, 144);
         drawSym(ctx, sp.sym.e, x + cw / 2, cy + 148 + Math.sin(t * 2 + i) * 3, 82);
         ui.text(ctx, sp.sym.ad, x + cw / 2, cy + 248, { size: 30, color: '#6b3a16', stroke: false, weight: 900 });
-        if (!sp.lines) sp.lines = wrap(ctx, sp.text, cw - 34, '700 27px ' + FONT);
+        if (!sp.lines) { // sunucu yüksek sesle okusun diye mümkün olan en büyük yazı
+          sp.font = '700 32px ' + FONT; sp.lh = 40;
+          sp.lines = wrap(ctx, sp.text, cw - 28, sp.font);
+          if (sp.lines.length > 4) { sp.font = '700 28px ' + FONT; sp.lh = 35; sp.lines = wrap(ctx, sp.text, cw - 24, sp.font); }
+        }
         ctx.save();
-        ctx.font = '700 27px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#3b1f0e';
-        for (var k = 0; k < sp.lines.length && k < 6; k++) ctx.fillText(sp.lines[k], x + cw / 2, cy + 300 + k * 36);
+        ctx.font = sp.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#3b1f0e';
+        var sy0 = cy + 300 + Math.max(0, (4 - sp.lines.length) * sp.lh / 2) * 0.5;
+        for (var k = 0; k < sp.lines.length && k < 5; k++) ctx.fillText(sp.lines[k], x + cw / 2, sy0 + k * sp.lh);
         ctx.restore();
       }
       ctx.restore();
@@ -1639,10 +1746,15 @@
       ctx.drawImage(groundsCanvas, x + cw / 2 - 56, y + 80, 112, 112);
       drawSym(ctx, it.sym.e, x + cw / 2, y + 136 + Math.sin(t * 2 + i) * 3, 66);
       ui.text(ctx, it.sym.ad, x + cw / 2, y + 210, { size: 26, color: '#6b3a16', stroke: false, weight: 900 });
-      if (!it.lines) it.lines = wrap(ctx, it.text, cw - 30, '700 26px ' + FONT);
+      if (!it.lines) { // 2 satıra sığmazsa yazı küçülür, gerekirse 3 satır (asla yarım cümle kalmaz)
+        it.font = '700 27px ' + FONT; it.lh = 32;
+        it.lines = wrap(ctx, it.text, cw - 28, it.font);
+        if (it.lines.length > 2) { it.font = '700 23px ' + FONT; it.lh = 26; it.lines = wrap(ctx, it.text, cw - 24, it.font); }
+      }
       ctx.save();
-      ctx.font = '700 26px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#3b1f0e';
-      for (var k = 0; k < it.lines.length && k < 2; k++) ctx.fillText(it.lines[k], x + cw / 2, y + 246 + k * 31);
+      ctx.font = it.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#3b1f0e';
+      var ty0 = it.lines.length > 2 ? y + 236 : y + 246;
+      for (var k = 0; k < it.lines.length && k < 3; k++) ctx.fillText(it.lines[k], x + cw / 2, ty0 + k * it.lh);
       ctx.restore();
       if (ex.kopuk) { ctx.fillStyle = 'rgba(255,255,255,0.95)'; for (var b = 0; b < 7; b++) { ctx.beginPath(); ctx.arc(x + 20 + b * 41, y + 4, 10 + (b % 3) * 3, 0, TAU); ctx.fill(); } }
       ctx.restore();

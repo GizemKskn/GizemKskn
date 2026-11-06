@@ -123,7 +123,7 @@ window.BB_DATA = {
     ['Hayvanlar', 'Pandanın en sevdiği besin hangisidir?', 'Bambu', 'Balık', 'Muz', 'Havuç'],
     ['Hayvanlar', '"Çöl gemisi" olarak bilinen hayvan hangisidir?', 'Deve', 'At', 'Fil', 'Kaplumbağa'],
     ['Hayvanlar', 'Kurbağa yavrusuna ne denir?', 'İribaş', 'Tırtıl', 'Civciv', 'Kurtçuk'],
-    ['Hayvanlar', 'Kelebek olmadan önceki evresine ne denir?', 'Tırtıl', 'İribaş', 'Civciv', 'Oğlak'],
+    ['Hayvanlar', 'Kelebeğe dönüşmeden önce yaprak yiyen kurtçuğa ne denir?', 'Tırtıl', 'İribaş', 'Civciv', 'Oğlak'],
     ['Hayvanlar', 'İneğin yavrusuna ne denir?', 'Buzağı', 'Kuzu', 'Tay', 'Oğlak'],
     ['Hayvanlar', 'Atın yavrusuna ne denir?', 'Tay', 'Buzağı', 'Kuzu', 'Oğlak'],
     ['Hayvanlar', 'Keçinin yavrusuna ne denir?', 'Oğlak', 'Kuzu', 'Tay', 'Buzağı'],
@@ -338,4 +338,34 @@ window.BB_DATA = {
     [['🐝', '🏠'], 'arı kovanı', 'Doğa', ['kovan']],
     [['🌶️', '🌶️'], 'acı biber', 'Sebze', []],
   ],
+
+  // plaka: [kod, il, [kabul edilen diğer yazımlar]]
+  plates: [
+    [1, 'Adana', []], [2, 'Adıyaman', []], [3, 'Afyonkarahisar', ['afyon']], [4, 'Ağrı', []], [5, 'Amasya', []],
+    [6, 'Ankara', []], [7, 'Antalya', []], [8, 'Artvin', []], [9, 'Aydın', []], [10, 'Balıkesir', []],
+    [11, 'Bilecik', []], [12, 'Bingöl', []], [13, 'Bitlis', []], [14, 'Bolu', []], [15, 'Burdur', []],
+    [16, 'Bursa', []], [17, 'Çanakkale', []], [18, 'Çankırı', []], [19, 'Çorum', []], [20, 'Denizli', []],
+    [21, 'Diyarbakır', []], [22, 'Edirne', []], [23, 'Elazığ', []], [24, 'Erzincan', []], [25, 'Erzurum', []],
+    [26, 'Eskişehir', []], [27, 'Gaziantep', ['antep']], [28, 'Giresun', []], [29, 'Gümüşhane', []], [30, 'Hakkari', ['hakkâri']],
+    [31, 'Hatay', ['antakya']], [32, 'Isparta', []], [33, 'Mersin', ['içel']], [34, 'İstanbul', []], [35, 'İzmir', []],
+    [36, 'Kars', []], [37, 'Kastamonu', []], [38, 'Kayseri', []], [39, 'Kırklareli', []], [40, 'Kırşehir', []],
+    [41, 'Kocaeli', ['izmit']], [42, 'Konya', []], [43, 'Kütahya', []], [44, 'Malatya', []], [45, 'Manisa', []],
+    [46, 'Kahramanmaraş', ['maraş']], [47, 'Mardin', []], [48, 'Muğla', []], [49, 'Muş', []], [50, 'Nevşehir', []],
+    [51, 'Niğde', []], [52, 'Ordu', []], [53, 'Rize', []], [54, 'Sakarya', ['adapazarı']], [55, 'Samsun', []],
+    [56, 'Siirt', []], [57, 'Sinop', []], [58, 'Sivas', []], [59, 'Tekirdağ', []], [60, 'Tokat', []],
+    [61, 'Trabzon', []], [62, 'Tunceli', []], [63, 'Şanlıurfa', ['urfa']], [64, 'Uşak', []], [65, 'Van', []],
+    [66, 'Yozgat', []], [67, 'Zonguldak', []], [68, 'Aksaray', []], [69, 'Bayburt', []], [70, 'Karaman', []],
+    [71, 'Kırıkkale', []], [72, 'Batman', []], [73, 'Şırnak', []], [74, 'Bartın', []], [75, 'Ardahan', []],
+    [76, 'Iğdır', []], [77, 'Yalova', []], [78, 'Karabük', []], [79, 'Kilis', []], [80, 'Osmaniye', []],
+    [81, 'Düzce', []],
+  ],
+
+  // kelime avı için ek kabul edilen yazımlar (Türkçe karakter farkı zaten otomatik)
+  wordAlts: { kebap: ['kebab'], akordeon: ['akordiyon'], kanguru: ['kangru'] },
+
+  // kategori simgeleri
+  catEmoji: {
+    'Meyve': '🍎', 'Hayvan': '🐾', 'Eşya': '🧸', 'Yemek': '🍲', 'Meslek': '👷', 'Doğa': '🌿', 'Spor': '⚽',
+    'Müzik aleti': '🎸', 'Şehir': '🏙️', 'Renk': '🎨',
+  },
 };

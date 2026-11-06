@@ -34,13 +34,24 @@
   // ---------------------------------------------------------------------------
   // TERLİK (mavi plastik ev terliği, sarı bant)
   // ---------------------------------------------------------------------------
+  // Üstten görünüş ev terliği: ayak biçimli taban (topuk solda, burun sağda) + kırmızı burun kapağı
   function solePath(ctx) {
     ctx.beginPath();
-    ctx.moveTo(-50, 0);
-    ctx.bezierCurveTo(-50, -16, -34, -18, -10, -17);
-    ctx.bezierCurveTo(22, -23, 50, -21, 50, 0);
-    ctx.bezierCurveTo(50, 21, 22, 23, -10, 17);
-    ctx.bezierCurveTo(-34, 18, -50, 16, -50, 0);
+    ctx.moveTo(-49, 0);
+    ctx.bezierCurveTo(-49, -15, -37, -18, -20, -17);
+    ctx.bezierCurveTo(4, -16, 22, -25, 39, -22);
+    ctx.bezierCurveTo(55, -19, 56, 19, 39, 22);
+    ctx.bezierCurveTo(22, 25, 4, 16, -20, 17);
+    ctx.bezierCurveTo(-37, 18, -49, 15, -49, 0);
+    ctx.closePath();
+  }
+  function capPath(ctx) {
+    ctx.beginPath();
+    ctx.moveTo(-2, -20);
+    ctx.bezierCurveTo(18, -29, 42, -28, 50, -15);
+    ctx.bezierCurveTo(57, -5, 57, 5, 50, 15);
+    ctx.bezierCurveTo(42, 28, 18, 29, -2, 20);
+    ctx.quadraticCurveTo(-12, 0, -2, -20);
     ctx.closePath();
   }
   A.slipper = function (ctx, x, y, len, rot, o) {
@@ -50,21 +61,32 @@
     if (rot) ctx.rotate(rot);
     var s = len / 100;
     ctx.scale(s, s);
-    ctx.fillStyle = o.sole || '#0a2a66';
+    ctx.lineJoin = 'round';
+    // taban (koyu kenar) + iç taban
+    ctx.fillStyle = o.sole || '#4a2a17';
     solePath(ctx); ctx.fill();
-    ctx.save(); ctx.scale(0.88, 0.78);
-    ctx.fillStyle = o.bed || '#3b8cff';
+    ctx.strokeStyle = '#1e0f06'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.save(); ctx.translate(-3, 0); ctx.scale(0.86, 0.74);
+    ctx.fillStyle = o.bed || '#f2c98f';
     solePath(ctx); ctx.fill();
     ctx.restore();
-    ctx.fillStyle = 'rgba(255,255,255,0.28)';
-    ell(ctx, -22, -6, 18, 4); ctx.fill();
-    // bant
-    ctx.fillStyle = o.strap || '#ffd23f';
-    rr(ctx, 4, -25, 28, 50, 10); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillRect(8, -21, 5, 42);
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 2;
-    rr(ctx, 4, -25, 28, 50, 10); ctx.stroke();
+    // topuk izi
+    ctx.fillStyle = 'rgba(160,100,50,0.35)';
+    ell(ctx, -30, 0, 10, 8); ctx.fill();
+    // burun kapağı
+    ctx.fillStyle = o.cap || '#e63946';
+    capPath(ctx); ctx.fill();
+    ctx.strokeStyle = '#7a1020'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ell(ctx, 30, -10, 13, 5, -0.2); ctx.fill();
+    // ağız kenarı biyesi
+    ctx.strokeStyle = o.trim || '#ffd23f'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-1, -18); ctx.quadraticCurveTo(-10, 0, -1, 18); ctx.stroke();
+    // ponpon
+    ctx.fillStyle = '#fff';
+    circle(ctx, 16, 0, 8); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    circle(ctx, 18, 2, 4); ctx.fill();
     ctx.restore();
   };
   var slipCache = {};
@@ -72,8 +94,8 @@
     var c = slipCache[len];
     if (c) return c;
     c = document.createElement('canvas');
-    c.width = Math.ceil(len * 1.08); c.height = Math.ceil(len * 0.56);
-    A.slipper(c.getContext('2d'), c.width / 2, c.height / 2, len, 0);
+    c.width = Math.ceil(len * 1.16); c.height = Math.ceil(len * 0.66);
+    A.slipper(c.getContext('2d'), c.width / 2 - len * 0.04, c.height / 2, len, 0);
     slipCache[len] = c;
     return c;
   };

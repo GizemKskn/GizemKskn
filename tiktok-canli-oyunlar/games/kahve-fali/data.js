@@ -160,7 +160,7 @@
       'bir projede yıldızın parlayacak',
       'işlerin yağ gibi akacak',
       'bereketli bir dönem başlayacak',
-      'unuttuğun bir alacak tatlı bir sürprizle hatırlanacak',
+      'unuttuğun bir iyiliğin tatlı bir teşekkürle geri dönecek',
       'yeni bir sorumluluk sana çok yakışacak',
     ],
     okul: [
