@@ -142,9 +142,78 @@ function gift(d) {
     gift: { id, name, en: name, coins: Number(coins) || 1, count: delta, image: pic(det.giftImage) || pic(ext.image) || '' },
   };
 }
+// ---------------------------------------------------------------------------
+// Oturum istatistikleri: her yayın için bridge/oturumlar/ altına özet (JSON) ve
+// dakikalık döküm (CSV) yazılır. Böylece gerçek jeton/saat değerini görebilirsin.
+// ---------------------------------------------------------------------------
+const SESS_DIR = path.join(__dirname, 'oturumlar');
+let sess = null;
+function newSession() {
+  const d = new Date();
+  const id = d.toISOString().slice(0, 16).replace('T', '_').replace(':', '');
+  sess = {
+    id, kullanici: cfg.kullanici, baslangic: d.toISOString(), bitis: null,
+    yorum: 0, begeni: 0, hediye: 0, jeton: 0, takip: 0, paylasim: 0, katilim: 0,
+    izleyiciMaks: 0, izleyiciToplam: 0, izleyiciOrnek: 0,
+    yorumcular: new Set(), begenenler: new Set(), hediyeVerenler: new Set(), hediyeTurleri: {},
+    dakika: { yorum: 0, begeni: 0, jeton: 0, izleyici: 0 }, satirlar: ['zaman,yorum,begeni,jeton,izleyici'],
+  };
+}
+function track(evt) {
+  if (!sess) newSession();
+  const uid = evt.user && evt.user.id;
+  switch (evt.type) {
+    case 'chat': sess.yorum++; sess.dakika.yorum++; if (uid) sess.yorumcular.add(uid); break;
+    case 'like': sess.begeni += evt.count || 1; sess.dakika.begeni += evt.count || 1; if (uid) sess.begenenler.add(uid); break;
+    case 'gift': {
+      const c = (evt.gift.coins || 0) * (evt.gift.count || 1);
+      sess.hediye += evt.gift.count || 1; sess.jeton += c; sess.dakika.jeton += c;
+      if (uid) sess.hediyeVerenler.add(uid);
+      sess.hediyeTurleri[evt.gift.name] = (sess.hediyeTurleri[evt.gift.name] || 0) + c;
+      break;
+    }
+    case 'follow': sess.takip++; break;
+    case 'share': sess.paylasim++; break;
+    case 'join': sess.katilim++; break;
+    case 'viewers': sess.dakika.izleyici = evt.count || 0; sess.izleyiciMaks = Math.max(sess.izleyiciMaks, evt.count || 0); break;
+  }
+}
+function saveSession(final) {
+  if (!sess || (!sess.yorum && !sess.begeni && !sess.hediye)) return;
+  try {
+    fs.mkdirSync(SESS_DIR, { recursive: true });
+    const now = new Date();
+    if (final) sess.bitis = now.toISOString();
+    const saat = Math.max(1 / 60, (now - new Date(sess.baslangic)) / 3600000);
+    const ozet = {
+      kullanici: sess.kullanici, baslangic: sess.baslangic, bitis: sess.bitis || now.toISOString(), sureSaat: +saat.toFixed(2),
+      yorum: sess.yorum, begeni: sess.begeni, hediye: sess.hediye, jeton: sess.jeton, takip: sess.takip, paylasim: sess.paylasim,
+      tekilYorumcu: sess.yorumcular.size, tekilBegenen: sess.begenenler.size, tekilHediyeVeren: sess.hediyeVerenler.size,
+      izleyiciMaks: sess.izleyiciMaks, ortIzleyici: sess.izleyiciOrnek ? Math.round(sess.izleyiciToplam / sess.izleyiciOrnek) : 0,
+      jetonSaat: Math.round(sess.jeton / saat),
+      tahminiTL: +(sess.jeton * 0.0038 * 49.7).toFixed(0), // yaklaşık; TikTok gerçek oranı yayınlamıyor, %15 stopaj hariç
+      hediyeTurleri: sess.hediyeTurleri,
+    };
+    fs.writeFileSync(path.join(SESS_DIR, sess.id + '.json'), JSON.stringify(ozet, null, 2));
+    fs.writeFileSync(path.join(SESS_DIR, sess.id + '.csv'), sess.satirlar.join('\n') + '\n');
+    if (final) console.log(`📊 Oturum özeti kaydedildi: bridge/oturumlar/${sess.id}.json (jeton/saat: ${ozet.jetonSaat}, tahmini ₺${ozet.tahminiTL})`);
+  } catch (e) { console.error('Oturum kaydedilemedi:', e.message); }
+}
+setInterval(() => {
+  if (!sess) return;
+  const m = sess.dakika;
+  sess.satirlar.push([new Date().toISOString().slice(11, 16), m.yorum, m.begeni, m.jeton, m.izleyici].join(','));
+  if (m.izleyici) { sess.izleyiciToplam += m.izleyici; sess.izleyiciOrnek++; }
+  sess.dakika = { yorum: 0, begeni: 0, jeton: 0, izleyici: m.izleyici };
+  saveSession(false);
+}, 60000);
+process.on('SIGINT', () => { saveSession(true); process.exit(0); });
+process.on('SIGTERM', () => { saveSession(true); process.exit(0); });
+
 function emit(evt) {
   if (!evt) return;
   status.olaylar++;
+  track(evt);
   broadcast(evt);
 }
 
@@ -182,6 +251,7 @@ async function startTikTok() {
     conn.on(WebcastEvent.ROOM_USER, (d) => emit({ type: 'viewers', count: d.viewerCount || 0 }));
     if (WebcastEvent.SUBSCRIBE) conn.on(WebcastEvent.SUBSCRIBE, (d) => emit({ type: 'sub', user: user(d) }));
     conn.on(WebcastEvent.STREAM_END, () => {
+      saveSession(true); sess = null;
       console.log('📴 Yayın bitti. Yeniden yayına girmeniz bekleniyor...');
       setStatus({ bagli: false, durum: 'yayın bitti' });
       setTimeout(connect, 15000);
