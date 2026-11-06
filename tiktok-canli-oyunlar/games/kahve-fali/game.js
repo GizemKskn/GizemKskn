@@ -33,7 +33,7 @@
   var GRID_S = 0.85;
   var SLOTS = [];
   for (var r0 = 0; r0 < 2; r0++) for (var c0 = 0; c0 < 5; c0++) SLOTS.push({ x: 140 + c0 * 200, y: 1003 + r0 * 118 });
-  var PANEL = { x: 796, y: 402, w: 244, h: 478 };
+  var PANEL = { x: 796, y: 402, w: 244, h: 490 };
   var LAMP = { x: 150, y: 268 };
   var CEZVE = { x: 150, y: 846 };
   var CARD = { x: 100, y: 388, w: 880, h: 728 };
@@ -580,7 +580,8 @@
   function addToken(u, label, idx, gold) {
     if (tokens.length >= 14) return;
     var tg = tokenTarget(idx);
-    tokens.push({ user: u, tag: { id: u.id + '#tk' + label, name: label }, x0: LG.rand(260, 820), y0: 1290, x1: tg.x, y1: tg.y, t: 0, dur: 0.85, gold: gold });
+    var low = overlayOn();
+    tokens.push({ user: u, tag: { id: u.id + '#tk' + label, name: label }, x0: LG.rand(260, 820), y0: 1290, x1: tg.x, y1: tg.y, t: 0, dur: 0.85, gold: gold, arc: low ? 30 : 140, fadeAt: idx >= SLOTS.length ? 0.6 : 0.85 });
   }
 
   function enqueue(u, topic) {
@@ -1353,23 +1354,23 @@
       ui.text(ctx, 'İlk fincan senin!', cx, p.y + 254, { size: 26, color: '#ffd166', stroke: false });
     }
     for (var i = 0; i < Math.min(5, Q.length); i++) {
-      var e = Q[i], ry = p.y + 205 + i * 46;
+      var e = Q[i], ry = p.y + 202 + i * 42;
       if (e.gold) ui.emoji(ctx, e.gold >= 2 ? '🔮' : '👑', p.x + 26, ry, 24);
       else ui.text(ctx, String(i + 1), p.x + 26, ry + 1, { size: 24, color: '#ffd166', stroke: false });
       ui.avatar(ctx, e.user, p.x + 60, ry, 17, { ringWidth: 2.5, ring: e.gold ? '#ffd166' : '#e8c79a' });
       ui.text(ctx, shortUser(e.user, 12).name, p.x + 84, ry + 1, { size: 25, align: 'left', maxWidth: p.w - 98, color: e.gold ? '#ffd166' : '#fff3e0', stroke: false });
     }
-    if (Q.length > 5) ui.text(ctx, '+' + LG.fmt(Q.length - 5) + ' kişi daha', cx, p.y + 205 + 5 * 46 - 6, { size: 22, color: 'rgba(255,230,200,0.7)', stroke: false });
-    ctx.fillStyle = 'rgba(255,210,150,0.3)'; ctx.fillRect(p.x + 18, p.y + p.h - 82, p.w - 36, 2);
-    ui.text(ctx, '🔮 Bugün: ' + LG.fmt(readToday) + ' fal', cx, p.y + p.h - 56, { size: 24, color: '#ffe6c4', stroke: false, maxWidth: p.w - 24 });
-    ui.text(ctx, '💬 fal yaz → sıraya gir', cx, p.y + p.h - 22, { size: 22, color: '#ffd166', stroke: false, maxWidth: p.w - 20 });
+    if (Q.length > 5) ui.text(ctx, '+' + LG.fmt(Q.length - 5) + ' kişi daha', cx, p.y + 404, { size: 22, color: 'rgba(255,230,200,0.75)', stroke: false });
+    ctx.fillStyle = 'rgba(255,210,150,0.3)'; ctx.fillRect(p.x + 18, p.y + 424, p.w - 36, 2);
+    ui.text(ctx, '🔮 Bugün: ' + LG.fmt(readToday) + ' fal', cx, p.y + 448, { size: 23, color: '#ffe6c4', stroke: false, maxWidth: p.w - 24 });
+    ui.text(ctx, '💬 fal yaz → sıraya gir', cx, p.y + 474, { size: 21, color: '#ffd166', stroke: false, maxWidth: p.w - 20 });
   }
 
   function drawTokens(ctx) {
     for (var i = 0; i < tokens.length; i++) {
       var k = tokens[i], p = LG.ease.outCubic(clamp01(k.t / k.dur));
-      var x = LG.lerp(k.x0, k.x1, p), y = LG.lerp(k.y0, k.y1, p) - Math.sin(p * Math.PI) * 140;
-      var a = p > 0.85 ? (1 - p) / 0.15 : 1;
+      var x = LG.lerp(k.x0, k.x1, p), y = LG.lerp(k.y0, k.y1, p) - Math.sin(p * Math.PI) * k.arc;
+      var a = p > k.fadeAt ? (1 - p) / (1 - k.fadeAt) : 1;
       ctx.save(); ctx.globalAlpha = a;
       ui.emoji(ctx, k.gold ? '👑' : '☕', x, y - 30, 40);
       ui.drawNameTag(ctx, k.tag, x, y + 8, 24, k.gold ? '#3a1c0a' : '#fff', k.gold ? 'rgba(255,209,102,0.95)' : 'rgba(120,50,10,0.9)');
@@ -1402,8 +1403,7 @@
   }
 
   // --- Fal kartı -------------------------------------------------------------
-  var BODY_FONT = '700 37px ' + FONT;
-  function paper(ctx, x, y, w, h, kind, kopuk, r) {
+    function paper(ctx, x, y, w, h, kind, kopuk, r) {
     var key = (kind === 'normal' ? 'n' : 'g') + w + 'x' + h;
     var spr = paperCache[key];
     if (!spr) {
@@ -1481,12 +1481,12 @@
   }
 
   function footer(ctx, c, y, prog) {
-    ui.text(ctx, '🎯 Tuttu ' + c.yes + '  🙈 Tutmadı ' + c.no, CARD.x + 48, y, { size: 26, align: 'left', color: '#5a3010', stroke: false, maxWidth: 360 });
+    ui.text(ctx, '🎯 Tuttu ' + c.yes + '  🙈 Tutmadı ' + c.no, CARD.x + 48, y, { size: 26, align: 'left', color: '#5a3010', stroke: false, maxWidth: 318 });
     ui.text(ctx, 'Eğlence amaçlıdır 😄', CARD.x + CARD.w - 48, y, { size: 21, align: 'right', color: 'rgba(90,48,16,0.7)', stroke: false });
     if (c.lastVoter) {
       var lv = c.lastVoter, age = LG.time - lv.t;
       var ps = age < 0.25 ? 1 + 0.25 * Math.sin(age / 0.25 * Math.PI) : 1;
-      ctx.save(); ctx.translate(CARD.x + 496, y); ctx.scale(ps, ps);
+      ctx.save(); ctx.translate(CARD.x + 488, y); ctx.scale(ps, ps);
       ui.panel(ctx, -78, -19, 156, 38, { r: 19, fill: lv.yes ? 'rgba(46,160,90,0.9)' : 'rgba(200,70,100,0.9)', border: false });
       ui.text(ctx, (lv.yes ? '🎯 ' : '🙈 ') + lv.name, 0, 1, { size: 22, color: '#fff', stroke: false, maxWidth: 140 });
       ctx.restore();
@@ -1523,38 +1523,42 @@
     if (big) drawSpread(ctx, c, y, t);
     else {
       // sembol madalyonu
-      var my = y + 268;
+      var my = y + 246;
       ctx.save();
       if (c.kind !== 'normal' || c.kopuk) {
-        var hg = ctx.createRadialGradient(CX, my, 60, CX, my, 170);
+        var hg = ctx.createRadialGradient(CX, my, 50, CX, my, 150);
         hg.addColorStop(0, c.kopuk && c.kind === 'normal' ? 'rgba(255,255,255,0.9)' : 'rgba(255,215,90,0.85)'); hg.addColorStop(1, 'rgba(255,215,90,0)');
-        ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(CX, my, 170, 0, TAU); ctx.fill();
+        ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(CX, my, 150, 0, TAU); ctx.fill();
       }
-      ctx.drawImage(groundsCanvas, CX - 108, my - 108, 216, 216);
+      ctx.drawImage(groundsCanvas, CX - 92, my - 92, 184, 184);
+      // telve silüeti yavaşça renkli sembole dönüşür
       var rv = clamp01((ct - 0.45) / 0.9);
       var bob = Math.sin(t * 2.2) * 4;
-      if (rv < 1) drawSym(ctx, c.sym.e, CX, my + bob, 112, 'rgba(58,26,8,0.88)', 1 - rv);
+      if (rv < 1) drawSym(ctx, c.sym.e, CX, my + bob, 100, 'rgba(58,26,8,0.88)', 1 - rv);
       if (rv > 0) {
         var ss = 0.85 + 0.15 * LG.ease.outBack(rv);
         ctx.save(); ctx.translate(CX, my + bob); ctx.scale(ss, ss);
-        drawSym(ctx, c.sym.e, 0, 0, 112, null, rv);
+        drawSym(ctx, c.sym.e, 0, 0, 100, null, rv);
         ctx.restore();
       }
       ctx.restore();
       if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '6px';
-      ui.text(ctx, c.sym.ad, CX, my + 140, { size: 44, color: '#6b3a16', stroke: false, weight: 900 });
+      ui.text(ctx, c.sym.ad, CX, my + 124, { size: 42, color: '#6b3a16', stroke: false, weight: 900 });
       if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '0px';
-      // fal metni (daktilo)
+      // fal metni (daktilo) — en fazla ~6 satır, sığmazsa yazı küçülür
       if (!c.lines) {
-        c.font = BODY_FONT; c.lh = 49;
-        c.lines = wrap(ctx, c.text, w - 110, c.font);
-        if (c.lines.length > 5) { c.font = '700 33px ' + FONT; c.lh = 43; c.lines = wrap(ctx, c.text, w - 100, c.font); }
+        var fonts = [[37, 46, 110], [34, 42, 96], [31, 38, 86]];
+        for (var fi = 0; fi < fonts.length; fi++) {
+          c.font = '700 ' + fonts[fi][0] + 'px ' + FONT; c.lh = fonts[fi][1];
+          c.lines = wrap(ctx, c.text, w - fonts[fi][2], c.font);
+          if (c.lines.length * c.lh <= 232) break;
+        }
         c.total = c.text.length;
       }
       var shown = Math.floor(Math.max(0, ct - 0.6) * 75);
       ctx.save();
       ctx.font = c.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#3b1f0e';
-      var ty = my + 205;
+      var ty = my + 170 + c.lh / 2 + Math.max(0, (232 - c.lines.length * c.lh) / 2);
       for (var i = 0; i < c.lines.length; i++) {
         var ln = c.lines[i];
         if (shown <= 0) break;
@@ -1616,7 +1620,7 @@
     var title = (isReplay ? '🔁 ' : '') + '⚡ EKSPRES FAL · ' + ex.items.length + ' fincan birden!';
     ui.panel(ctx, CX - 400, 392, 800, 70, { r: 35, fill: ex.kopuk ? '#f3e2c7' : '#7a4a22', border: '#f6dfba', lineWidth: 4 });
     ui.text(ctx, title, CX, 429, { size: 36, color: ex.kopuk ? '#5a3010' : '#fff3e0', stroke: false, weight: 900, maxWidth: 760 });
-    var cw = 286, ch = 322, gap = 14;
+    var cw = 286, ch = 302, gap = 14;
     var x0 = CX - (cw * 3 + gap * 2) / 2;
     for (var i = 0; i < ex.items.length; i++) {
       var it = ex.items[i];
@@ -1632,21 +1636,22 @@
       ctx.strokeStyle = ex.kopuk ? '#e8c8a0' : '#7a4a22'; ctx.lineWidth = 5; ctx.stroke();
       ui.avatar(ctx, it.user, x + 44, y + 44, 28, { ringWidth: 3, ring: '#7a4a22' });
       ui.text(ctx, it.user.name, x + 82, y + 45, { size: 28, align: 'left', color: '#3a1c0a', stroke: false, maxWidth: cw - 96, weight: 900 });
-      ctx.drawImage(groundsCanvas, x + cw / 2 - 60, y + 84, 120, 120);
-      drawSym(ctx, it.sym.e, x + cw / 2, y + 144 + Math.sin(t * 2 + i) * 3, 70);
-      ui.text(ctx, it.sym.ad, x + cw / 2, y + 224, { size: 26, color: '#6b3a16', stroke: false, weight: 900 });
+      ctx.drawImage(groundsCanvas, x + cw / 2 - 56, y + 80, 112, 112);
+      drawSym(ctx, it.sym.e, x + cw / 2, y + 136 + Math.sin(t * 2 + i) * 3, 66);
+      ui.text(ctx, it.sym.ad, x + cw / 2, y + 210, { size: 26, color: '#6b3a16', stroke: false, weight: 900 });
       if (!it.lines) it.lines = wrap(ctx, it.text, cw - 30, '700 26px ' + FONT);
       ctx.save();
       ctx.font = '700 26px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#3b1f0e';
-      for (var k = 0; k < it.lines.length && k < 2; k++) ctx.fillText(it.lines[k], x + cw / 2, y + 262 + k * 32);
+      for (var k = 0; k < it.lines.length && k < 2; k++) ctx.fillText(it.lines[k], x + cw / 2, y + 246 + k * 31);
       ctx.restore();
       if (ex.kopuk) { ctx.fillStyle = 'rgba(255,255,255,0.95)'; for (var b = 0; b < 7; b++) { ctx.beginPath(); ctx.arc(x + 20 + b * 41, y + 4, 10 + (b % 3) * 3, 0, TAU); ctx.fill(); } }
       ctx.restore();
     }
     // süre çubuğu
     var prog = clamp01(ex.t / ex.dur);
-    ctx.fillStyle = 'rgba(255,230,200,0.25)'; ui.roundRect(ctx, CX - 400, 1146, 800, 10, 5); ctx.fill();
-    ctx.fillStyle = '#ffd166'; ui.roundRect(ctx, CX - 400, 1146, Math.max(10, 800 * (1 - prog)), 10, 5); ctx.fill();
+    ctx.fillStyle = 'rgba(255,230,200,0.25)'; ui.roundRect(ctx, CX - 400, 1104, 800, 10, 5); ctx.fill();
+    ctx.fillStyle = '#ffd166'; ui.roundRect(ctx, CX - 400, 1104, Math.max(10, 800 * (1 - prog)), 10, 5); ctx.fill();
+    ui.text(ctx, 'Eğlence amaçlıdır 😄', CX + 400, 1088, { size: 20, align: 'right', color: 'rgba(255,236,210,0.85)', stroke: false });
     ctx.restore();
   }
 
