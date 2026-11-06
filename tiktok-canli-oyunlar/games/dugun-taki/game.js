@@ -31,17 +31,17 @@
   var MAX_DANCERS = LG.clamp(LG.qn('maks', 120), 20, 160);
   var DS = 0.84;            // dansçı ölçeği
   var MAX_TAGS = 30;        // aynı anda en fazla isim etiketi
-  var NPC_TARGET = 14;      // kimse yokken halayı çeken köy ahalisi
+  var NPC_TARGET = 16;      // kimse yokken halayı çeken köy ahalisi
   var MAX_ITEMS = 72;       // kurdeledeki en fazla takı (fazlası birleşir)
   var CS = 2.1;             // gelin-damat ölçeği
   var HOME = { x: 546, y: 694 };
-  var FLOOR_Y = 1078;       // gelin-damat piste inince ayak hizası
+  var FLOOR_Y = 1140;       // gelin-damat piste inince ayak hizası (anons bandının altında kalsın)
   var DAV = { x: 128, y: 672, s: 1.28 }, ZUR = { x: 284, y: 672, s: 1.28 };
   var DEF = { x: 714, w: 326, bottom: 694 };
 
   // Eller kamerası üstte ise üst bilgi şeridi kameranın olmadığı tarafa kayar
   var CAMTOP = LG.CAM && LG.CAM.y < 700 ? LG.CAM : null;
-  var L = { hx0: SAFE.x, hx1: SAFE.x + SAFE.w, titleY: 281, signY: 364, chipY: 400, chipH: 40, chipRows: 1, defTop: 452, gaugeY: 456, bannerY: 812, calloutY: 1000, plaque: true };
+  var L = { hx0: SAFE.x, hx1: SAFE.x + SAFE.w, titleY: 281, signY: 364, chipY: 400, chipH: 40, chipRows: 1, defTop: 452, gaugeY: 456, bannerY: 812, calloutY: 1000, calloutTopY: 590, tickerY: 1186, plaque: true };
   if (CAMTOP) {
     var camBottom = CAMTOP.y + CAMTOP.h + 8;
     if (CAMTOP.x + CAMTOP.w / 2 > W / 2) { L.hx1 = CAMTOP.x - 14; L.defTop = max(L.defTop, camBottom); }
