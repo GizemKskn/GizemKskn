@@ -24,7 +24,7 @@
   A.BUS = { rearX: -372, frontX: 374, roofY: -281, bottom: 0, wheelR: 50, wheels: [-235, 245], door: [118, 215], doorC: { x: 166, y: -110 }, driver: { x: 282, y: -194 } };
   A.roofY = function (x, f) {
     var t = LG.clamp((x + 335) / 597, 0, 1);
-    return -281 - 136 * f * t * (1 - t);
+    return -281 - 200 * f * t * (1 - t);
   };
 
   // ---------------------------------------------------------------------------
@@ -163,7 +163,7 @@
         g.beginPath(); g.moveTo(x + 10, ly); g.lineTo(x + w - 10, ly); g.stroke();
         for (var cx = x + 22; cx < x + w - 30; cx += 26 + R() * 14) cloth(g, R, cx, ly);
       }
-      if (R() < 0.35) { g.font = '28px ' + ui.EMOJI_FONT; g.textAlign = 'center'; g.textBaseline = 'bottom'; g.fillText(R() < 0.5 ? '🐈' : '🐈‍⬛', x + w * (0.3 + R() * 0.4), top + 2); }
+      if (R() < 0.35) { g.font = '28px ' + ui.EMOJI_FONT; g.textAlign = 'center'; g.textBaseline = 'bottom'; g.fillText('🐈', x + w * (0.3 + R() * 0.4), top + 2); }
     }
     // katlar
     var floorH = 66, shopH = 92;
@@ -358,12 +358,14 @@
     ctx.fillStyle = '#fff'; ctx.font = '900 28px ' + ui.FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText('DURAK', -16, -218);
     if (name) {
-      ctx.font = '900 24px ' + ui.FONT;
+      ctx.font = '900 26px ' + ui.FONT;
       var w = Math.min(300, ctx.measureText(name).width + 28);
-      ctx.fillStyle = '#fff'; rr(ctx, -w / 2, -182, w, 38, 8); ctx.fill();
+      // ekranın sağ kenarından taşmasın
+      var lx = Math.min(0, (LG.W - 30 - w / 2) - x);
+      ctx.fillStyle = '#fff'; rr(ctx, lx - w / 2, -184, w, 40, 8); ctx.fill();
       ctx.strokeStyle = '#1565c0'; ctx.lineWidth = 3; ctx.stroke();
       ctx.fillStyle = '#12355e'; ctx.textAlign = 'center';
-      ctx.fillText(name, 0, -162, w - 16);
+      ctx.fillText(name, lx, -163, w - 16);
     }
     ctx.restore();
   };
@@ -487,13 +489,13 @@
   function bodyPath(ctx, f) {
     ctx.beginPath();
     ctx.moveTo(-372, -8);
-    ctx.quadraticCurveTo(-372 - 26 * f, -140, -370, -252);
+    ctx.quadraticCurveTo(-372 - 40 * f, -140, -370, -252);
     ctx.quadraticCurveTo(-368, -281, -335, -281);
-    ctx.quadraticCurveTo(-36, -281 - 68 * f, 262, -281);
+    ctx.quadraticCurveTo(-36, -281 - 100 * f, 262, -281);
     ctx.quadraticCurveTo(292, -281, 306, -262);
     ctx.lineTo(350, -172);
-    ctx.quadraticCurveTo(372 + 14 * f, -152, 374 + 12 * f, -92);
-    ctx.lineTo(376 + 8 * f, -24);
+    ctx.quadraticCurveTo(372 + 22 * f, -152, 374 + 18 * f, -92);
+    ctx.lineTo(376 + 12 * f, -24);
     ctx.quadraticCurveTo(374, 0, 350, 0);
     ctx.lineTo(-350, 0);
     ctx.quadraticCurveTo(-372, 0, -372, -8);
@@ -550,8 +552,21 @@
     // tekerlek kemerleri
     ctx.fillStyle = '#1a1a1f';
     for (var w = 0; w < 2; w++) { ctx.beginPath(); ctx.arc(A.BUS.wheels[w], 2, 64, PI, 0); ctx.fill(); }
+    // aşırı doluluk: gerilme çizgileri
+    if (f > 0.55) {
+      var k = (f - 0.55) / 0.45, jit = Math.sin(t * 30) * 2;
+      ctx.strokeStyle = 'rgba(40,25,0,' + (0.5 + 0.4 * k) + ')'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (var m = 0; m < 3; m++) {
+        var rx = -400 - 20 * f - m * 14 + jit, ry = -150 + m * 4;
+        ctx.moveTo(rx, ry - 26 + m * 6); ctx.quadraticCurveTo(rx - 10, ry, rx, ry + 26 - m * 6);
+        var tx = -60 + m * 40, ty = A.roofY(tx, f) - 18 - m * 10 + jit;
+        ctx.moveTo(tx - 16, ty); ctx.quadraticCurveTo(tx, ty - 10, tx + 16, ty);
+      }
+      ctx.stroke();
+    }
     // farlar
-    var hx = 362 + 10 * f;
+    var hx = 362 + 16 * f;
     ctx.fillStyle = S.night ? '#fff7c2' : '#fffbe6';
     ctx.beginPath(); ctx.ellipse(hx, -74, 10, 18, 0, 0, TAU); ctx.fill();
     ctx.strokeStyle = '#555'; ctx.lineWidth = 3; ctx.stroke();
@@ -815,6 +830,24 @@
   }
 
   // Kanatlar (5.000+ jeton: uçan dolmuş)
+  // Gökkuşağı izi (uçuş): (x0,y0) dolmuşun arkası, sola doğru dalgalı şeritler
+  var RAINBOW = ['#ff3b3b', '#ff9f1c', '#ffd400', '#2ecc71', '#3aa0ff', '#9b5de5'];
+  A.rainbow = function (ctx, x0, y0, t, alpha) {
+    if (alpha <= 0.02 || x0 < 0) return;
+    ctx.save(); ctx.globalAlpha = alpha; ctx.lineWidth = 11; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (var b = 0; b < RAINBOW.length; b++) {
+      ctx.strokeStyle = RAINBOW[b];
+      ctx.beginPath();
+      for (var x = x0; x > -40; x -= 34) {
+        var d = x0 - x;
+        var y = y0 + (b - 2.5) * 10 + Math.sin(d * 0.011 - t * 5) * Math.min(1, d / 160) * 26;
+        if (x === x0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
   A.wing = function (ctx, x, y, t, back, s) {
     var flap = Math.sin(t * 10) * 0.4;
     ctx.save(); ctx.translate(x, y); ctx.scale(s || 1, s || 1); ctx.rotate(-1.15 + flap);

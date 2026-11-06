@@ -49,6 +49,8 @@
   D.CHANGE = ['Para üstü!', 'Üstü kalsın? Yok yok, al!', 'Buyur üstü!'];
   D.CROWD_IN = ['Ben de geliyorum!', 'Bekle şoför bey!', 'Yer var mı?', 'Kapıyı aç!'];
   D.NOT_ON = ['Daha binmedim ki! 😅', 'Önce bineyim!', 'Ben duraktayım!'];
+  D.EMPTY = ['Boş yer var, boş!', 'Yorum yazan biner, bedava!', 'Kimse yok mu? Atla gel!', 'Yorumunu yaz, kapıyı açarım!', 'Bu dolmuş seni bekler!'];
+  D.NEW_HI = ['Hoş geldin', 'Buyur', 'Atla', 'Geç arkaya'];
 
   // Süsler (30+ jeton) — rota boyunca birikir
   D.DECOR = [
@@ -58,18 +60,19 @@
     { id: 'cicek', name: 'Çiçek çıkartma', emoji: '🌸' },
     { id: 'masallah', name: '"Maşallah" yazısı', emoji: '✨' },
     { id: 'led', name: 'Renkli LED şerit', emoji: '💡' },
-    { id: 'jant', name: 'Parlak jantlar', emoji: '🛞' },
+    { id: 'jant', name: 'Parlak jantlar', emoji: '💿' },
     { id: 'spoiler', name: 'Yarış spoyleri', emoji: '🏁' },
     { id: 'boynuz', name: 'Boynuz korna', emoji: '📯' },
     { id: 'kalp', name: 'Kalp çıkartma', emoji: '💖' },
   ];
 
   D.HINTS = [
-    '💬 Yorum yaz → dolmuşa bin',
+    '💬 Yorum yaz → dolmuşa bin (bedava 😄)',
     '🛑 "inecek var" yaz → sonraki durakta in',
     '❤️ Beğen → dolmuş hızlanır',
-    '🎁 Hediye → parayı şoföre uzat',
+    '💬 Yorum yaz → dolmuşa bin',
     '🎵 "müzik" · 🌬️ "klima" · 📯 "korna" yaz',
+    '🎁 Hediye → parayı şoföre uzat',
     '🐢 "yavaş" · 🚀 "bas" yaz → hızı sen seç',
   ];
 

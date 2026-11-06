@@ -23,12 +23,15 @@
     roundLen: LG.clamp(LG.qn('tur', 150), 45, 600),
     maxWin: LG.clamp(LG.qn('kazanan', 10), 1, 10),
     step: LG.clamp(LG.qn('adim', 0.11), 0.02, 0.5),
-    grace: LG.clamp(LG.qn('tolerans', 0.5), 0, 2),   // anne döner dönmez gelen (yayın gecikmeli) yorumlar için kısa hoşgörü
+    // Anne döndükten sonraki bu kadar saniye içinde gelen yorum ne adım attırır ne cezalandırılır.
+    // TikTok'ta görüntü 2–4 sn gecikmeli; izleyici yeşili görürken yazdığı "git" kırmızıya düşebilir.
+    // Bakış süresi bu kadar uzatılır, yani cezalı pencere hep ~2–3,5 sn kalır. Gecikmesi çok olan yayın: ?tolerans=2.5
+    grace: LG.clamp(LG.qn('tolerans', 1.2), 0, 4),
     tiny: 0.028,
     finalSec: 30,
     endCard: 9,
   };
-  var FULL_CAP = 34, MINI_CAP = 70, START_CAP = 14, TAG_CAP = 16;
+  var FULL_CAP = 34, MINI_CAP = 100, START_CAP = 14, TAG_CAP = 22;
 
   var TREATS = [
     { id: 'baklava', name: 'BAKLAVA', acc: 'BAKLAVAYI', lab: 'Baklavayı', emoji: '🍯' },
@@ -61,7 +64,9 @@
     armPh: 0, tilt: 0, throwT: 0, walkPh: 0, walking: false, prop: null, scan: 0, still: false,
     redId: 0, slowDone: false, lastFake: false, distract: null, queued: null, cool: 0,
     bubble: null, pendingTurn: false, clatT: 0, caughtAny: false,
+    needLook: false,   // oyalanma bitti: yeni oyalanma için anne önce en az bir kez dönüp bakmalı (hediye yağsa da gerilim sürsün)
   };
+  var stamp = null;    // ekran ortasında kısa "DUR!" damgası
   var cat = null;
   var pending = [], flights = [], comics = [], floorS = [], shards = [], rainP = [];
   var feedArr = [], banners = [], banner = null, bannerGap = 0, bigs = [], big = null;
@@ -218,7 +223,7 @@
   // ---------------------------------------------------------------------------
   // Terlik fırlatma
   // ---------------------------------------------------------------------------
-  var nextLaunch = 0, lastAyy = 0, lastPhew = 0;
+  var nextLaunch = 0, lastAyy = 0, lastPhew = 0, lastStars = 0;
   function headPos(k) { return { x: k.x, y: k.y - 88 * k.s }; }
   function updateThrows(dtw) {
     var canLaunch = mom.st === 'look' || (mom.st === 'turn' && mom.t > 0.18);
@@ -282,7 +287,8 @@
     k.p = 0; k.pFrom = 0; k.stepT = 1;
     comic(hp.x + 10, hp.y - 30 * k.s, LG.pick(['ŞAP!', 'PAT!', 'BONK!', 'ŞLAK!']), '#ffd23f', (big ? 72 : 48) * Math.max(0.75, k.s), LG.rand(-0.3, 0.3));
     if (big || LG.time - lastAyy > 0.3) { lastAyy = LG.time; ui.float(LG.pick(['AYY!', 'AYY!', 'OFF!', 'ANNEEE!']), hp.x, hp.y - 70 * k.s, { color: '#ff8fab', size: big ? 64 : 40, life: 1.3 }); }
-    if (k.vis) ui.burst(hp.x, hp.y, { count: big ? 10 : 4, shape: 'emoji', emoji: '⭐', speed: 380, size: 12, life: 0.9, gravity: 600 });
+    // yıldız patlaması: toplu terlikte ekranı (ve hediye panelini) boğmasın diye seyreltilir
+    if (k.vis && (big || LG.time - lastStars > 0.14)) { lastStars = LG.time; ui.burst(hp.x, hp.y, { count: big ? 10 : 3, shape: 'emoji', emoji: '⭐', speed: 380, size: 12, life: 0.8, gravity: 600 }); }
     dropSlip(hp.x, hp.y, k.x + LG.rand(-60, 60), k.y + LG.rand(-6, 10), k.s);
     ui.shake(big ? 20 : 7, big ? 0.45 : 0.22);
     LG.sfx('clap'); LG.sfx('boing');
@@ -296,7 +302,7 @@
   }
   function dropSlip(x0, y0, x1, y1, s) {
     floorS.push({ x0: x0, y0: y0, x1: x1, y1: y1, s: s, t: 0, r0: Math.random() * 6, r1: LG.rand(-0.7, 0.7) });
-    if (floorS.length > 40) floorS.shift();
+    if (floorS.length > 30) floorS.shift();
   }
 
   // ---------------------------------------------------------------------------
@@ -342,15 +348,19 @@
     LG.sfx('honk');
     ui.flash('#ff2d2d', 0.22);
     ui.shake(5, 0.15);
+    stamp = { text: 'DUR!', icon: '✋', col: '#ff3b3b', t: 0, dur: 0.9 };
   }
   function startLook() {
     mom.st = 'look'; mom.t = 0;
-    mom.dur = S.final ? LG.rand(2.2, 3.2) : LG.rand(2.4, 3.6);
+    // hoşgörü süresi kadar uzatılır: cezalı pencere yayın gecikmesinden bağımsız olarak ~2–3,4 sn kalır
+    mom.dur = CFG.grace + (S.final ? LG.rand(2.0, 2.8) : LG.rand(2.2, 3.4));
     mom.view = 'front'; mom.flip = 1; mom.tilt = 0;
     say(LG.pick(['Ne oluyor orada?! 🤨', 'Kim kıpırdadı?', 'Uyumadınız mı siz?!', 'Hıh?!', 'Bana bakın bakayım!']), 1.3);
   }
   function startBack() {
     mom.st = 'back'; mom.t = 0; mom.dur = 0.24;
+    mom.needLook = false;
+    if (S.phase === 'play' && S.introT <= 0) stamp = { text: 'GİT!', icon: '🏃', col: '#3dff8f', t: 0, dur: 0.75 };
     if (!mom.caughtAny) say(LG.pick(['Hıı… iyi.', 'Uslu durun!', 'Hmph.']), 1.0);
   }
 
@@ -368,15 +378,17 @@
       var md = mom.distract;
       if (d.tier > DIS[md.kind].tier) { md.kind = kind; md.k0 = md.t; md.user = user; initDistract(md); }
       var rem = md.dur - md.t;
-      var newRem = Math.min(rem + add, 26 - md.t, 18);
+      var newRem = Math.min(rem + add, 20 - md.t, 15);   // tek oyalanma en fazla ~20 sn
       md.dur = md.t + Math.max(rem, newRem);
       md.thanks = user;
       return 'extended';
     }
-    if (mom.cool > 0 || (mom.x < 150 && !mom.distract)) {
+    // Az önce oyalandıysa (ya da anne şu an bakıyorsa) hediye sıraya girer: anne önce bir kez dönüp bakar.
+    // Böylece hediye yağsa da kırmızı ışık anları kaybolmaz; çocuklar yine de hediyeyle kurtulabilir (needLook yokken).
+    if (mom.needLook || (mom.x < 150 && !mom.distract)) {
       var q = mom.queued;
       if (!q) mom.queued = { kind: kind, user: user, dur: add };
-      else { if (d.tier > DIS[q.kind].tier) { q.kind = kind; q.user = user; } q.dur = Math.min(16, q.dur + add); }
+      else { if (d.tier > DIS[q.kind].tier) { q.kind = kind; q.user = user; } q.dur = Math.min(Math.max(12, d.dur), q.dur + add); }
       return 'queued';
     }
     beginDistract(kind, user, add);
@@ -394,11 +406,12 @@
       }
       pending = [];
     }
-    if (wasRed) ui.float('Aaa!', mom.x, 420, { color: '#fff', size: 44 });
+    if (wasRed) { ui.float('Aaa!', mom.x, 420, { color: '#fff', size: 44 }); stamp = null; }
     initDistract(mom.distract);
     musicOn();
   }
   function initDistract(md) {
+    if (md.kind !== 'cat' && cat) cat.leaving = true;   // kedi oyalaması daha büyüğüne yükseldiyse kedi sahneden çıkar
     if (md.kind === 'cat') {
       cat = { t: 0, x: -80, y: G.KF, vx: 0, vase: !S.vaseBroken, crashT: -1 };
       mom.tx = 450; mom.prop = null;
@@ -450,9 +463,9 @@
   function endDistract() {
     var md = mom.distract;
     mom.distract = null;
-    mom.cool = 7; mom.prop = null;
+    mom.cool = 0; mom.needLook = true; mom.prop = null;
     var walk = Math.abs(540 - mom.x) / 280;
-    if (md && md.kind === 'cat' && cat) cat.leaving = true;
+    if (cat) cat.leaving = true;
     mom.act = 'bulasik'; mom.tx = 540;
     startBusy(Math.max(2.2, walk + 1.4));
     say(md && md.kind === 'guests' ? 'Çocuklar uyuyor mu acaba? 🤨' : 'Neyse, ben işime bakayım… 🤨', 1.6);
@@ -531,12 +544,12 @@
         break;
       case 'away': updateDistract(dtw); break;
     }
-    if (mom.queued && mom.cool <= 0 && S.phase === 'play' && mom.x > 150 && (mom.st === 'busy' || isWarn() || isRed())) {
+    if (mom.queued && !mom.needLook && !mom.pendingTurn && S.phase === 'play' && mom.x > 150 && mom.st === 'busy') {
       var q = mom.queued; mom.queued = null;
       beginDistract(q.kind, q.user, q.dur);
     }
     if (mom.pendingTurn && !mom.distract && S.phase === 'play' && mom.x > 200 && (mom.st === 'busy' || isWarn())) { mom.pendingTurn = false; startTurn(); }
-    if (cat && !mom.distract) updateCat(dtw);
+    if (cat && (!mom.distract || mom.distract.kind !== 'cat')) updateCat(dtw);
   }
 
   // ---------------------------------------------------------------------------
@@ -550,7 +563,7 @@
     S.vaseBroken = false; S.roundStart = LG.time || 0;   // ilk turda LG.time henüz tanımsız olabilir
     pending = []; flights = []; floorS = []; shards = []; rainP = [];
     banners = []; banner = null; bigs = []; big = null; bannerGap = 3.6;
-    cat = null; mom.distract = null; mom.queued = null; mom.cool = 0; mom.pendingTurn = false;
+    cat = null; mom.distract = null; mom.queued = null; mom.cool = 0; mom.pendingTurn = false; mom.needLook = false; stamp = null;
     // eski (5 dk'dır sessiz) çocukları temizle, diğerlerini başlangıca diz
     var now = LG.time || 0;
     kidList = kidList.filter(function (k) {
@@ -573,9 +586,9 @@
     if (reason === 'rain') {
       for (var j = 0; j < kidList.length; j++) {
         var kk = kidList[j];
-        if (kk.lastAct >= S.roundStart && kk.rank === 0) { board.add(kk.u, 1); everyone++; }
+        // herkes ikramdan payını alır (kutlama); tahta puanı YOK — tahta yalnızca buzdolabına yürüyerek varanları sayar
+        if (kk.lastAct >= S.roundStart && kk.rank === 0) everyone++;
       }
-      chalkDirty = true;
     }
     S.sum = {
       reason: reason, winners: S.winners.map(function (k) { return k.u; }), hits: S.hits, hitKids: S.hitKids.size,
@@ -678,11 +691,13 @@
       k.heartT = LG.time;
       ui.float('❤', k.x + LG.rand(-20, 20), k.y - 125 * k.s, { color: '#ff4d6d', size: 26 + 10 * k.s, life: 1.1, vy: -90 });
     }
+    // Beğeniler gecikmeli ve toplu gelir: anne bakarken beğeni CEZALANDIRILMAZ, birikir; yeşil yanınca minik adım olur.
     var n = Math.floor(k.likeAcc / 10);
-    if (n > 0) {
+    if (n > 0 && canAct(k) && !isRed()) {
       k.likeAcc -= n * 10;
-      if (canAct(k)) { k.lastAct = LG.time; tryMove(k, CFG.tiny * Math.min(n, 3), true); }
+      k.lastAct = LG.time; tryMove(k, CFG.tiny * Math.min(n, 3), true);
     }
+    if (k.likeAcc > 40) k.likeAcc = 40;
   });
   LG.on('follow', function (e) {
     if (!e.user) return;
@@ -717,7 +732,13 @@
     }
     if (tier === 2) {
       var r2 = distract('cat', u, Math.min(g.count, 3));
-      addBanner({ kind: 'gift', key: 'cat', user: u, text: '🐈 KEDİ VAZOYU DEVİRDİ!', sub: 'Teşekkürler ' + u.name + '! ' + (r2 === 'queued' ? 'Sırada: anneyi kedi oyalayacak' : 'Anne kedinin peşinde — herkes ilerlesin!'), icon: gem, color: '#ffb4d9', dur: 2.4 });
+      var otherKind = r2 === 'extended' && mom.distract && mom.distract.kind !== 'cat';
+      addBanner({
+        kind: 'gift', key: otherKind ? 'ext' : 'cat', user: u,
+        text: otherKind ? '⏳ ANNE DAHA DA OYALANIYOR!' : r2 === 'queued' ? '🐈 KEDİ SIRADA!' : '🐈 KEDİ VAZOYU DEVİRDİ!',
+        sub: 'Teşekkürler ' + u.name + '! ' + (r2 === 'queued' ? 'Anne bir bakınca kedi işini görecek 😼' : otherKind ? 'Herkese ekstra yeşil süre!' : r2 === 'none' ? '💖' : 'Anne kedinin peşinde — herkes ilerlesin!'),
+        icon: gem, color: '#ffb4d9', dur: 2.4,
+      });
       LG.sfx('coin');
       return;
     }
@@ -736,13 +757,19 @@
       return;
     }
     var r = distract(kind, u, 1);
-    var D = DIS[kind];
+    // süre uzatıldıysa başlık, ekranda gerçekten olanı söylesin (ör. teyzeler varken gelen telefon hediyesi)
+    var D = r === 'extended' && mom.distract && DIS[mom.distract.kind] ? DIS[mom.distract.kind] : DIS[kind];
     if (r === 'none') {
       addBig({ title: 'ÇOK TEŞEKKÜRLER! 💖', sub: g.name + (g.count > 1 ? ' x' + g.count : '') + ' — harikasın!', thanks: u.name, icon: gem, user: u, color: '#ffd166', dur: 2.6 });
       LG.sfx('levelup');
       return;
     }
-    addBig({ title: D.title, sub: r === 'queued' ? 'Sırada: anne birazdan oyalanacak ⏳' : r === 'extended' ? 'Anne daha da oyalanıyor — devam!' : kind === 'phone' ? 'Anne 10 sn telefonda — herkes ilerlesin!' : 'Anne kapıda — herkes sinsice ilerliyor!', thanks: 'Teşekkürler ' + u.name + '! 💖', icon: gem, user: u, color: kind === 'phone' ? '#9bf6ff' : '#ffd166', dur: 3 });
+    var qTitle = kind === 'phone' ? 'TELEFON SIRADA! 📞' : 'TEYZELER YOLDA! 👵';
+    addBig({
+      title: r === 'queued' ? qTitle : D.title,
+      sub: r === 'queued' ? 'Anne bir bakınca oyalanacak ⏳' : r === 'extended' ? 'Anne daha da oyalanıyor — devam!' : kind === 'phone' ? 'Anne 10 sn telefonda — herkes ilerlesin!' : 'Anne kapıda — herkes sinsice ilerliyor!',
+      thanks: 'Teşekkürler ' + u.name + '! 💖', icon: gem, user: u, color: kind === 'phone' ? '#9bf6ff' : '#ffd166', dur: 2.7,
+    });
     LG.sfx(tier >= 4 ? 'fanfare' : 'levelup');
     ui.burst(540, 940, { count: tier >= 4 ? 90 : 50, speed: 750 });
     if (tier >= 4) ui.shake(10, 0.35);
@@ -763,7 +790,7 @@
     if (S.phase !== 'play' || mom.distract) return;
     if (isRed() || isWarn()) {
       if (pending.length) { pending.forEach(function (k) { if (k.state === 'caught') k.state = 'idle'; }); pending = []; }
-      mom.st = 'back'; mom.t = 0; mom.dur = 0.24;
+      startBack();
       say('Neyse… 🙄', 1);
     } else if (mom.st === 'busy') mom.dur += 4;
   });
@@ -772,6 +799,16 @@
 
   // Simülatör: oyuna uygun yorumlar
   LG.sim.comments = [['git', 7], ['ilerle', 2], ['yürü', 2], ['koş', 2], ['katıl', 3], ['anne bakıyor!', 1], ['😂😂', 1], ['baklava benim', 1]];
+  // Ortak simülatör, otomatik demoda saniyede ~1–2 hediye üretiyor (gerçek yayından çok fazla); bu oyunda hediye
+  // anneyi oyaladığı için demo hep "yeşil" görünür. Yalnızca otomatik (adsız) hediyeleri seyreltiyoruz;
+  // paneldeki hediye düğmeleri ve testlerin adlı hediyeleri aynen geçer.
+  (function () {
+    var simGift = LG.sim.gift;
+    LG.sim.gift = function (u, giftName, count) {
+      if (!u && !giftName && Math.random() > 0.25) return;
+      return simGift.apply(this, arguments);
+    };
+  })();
   LG.sim.genComment = function (u) {
     var k = kids.get(String(u.id));
     var r = Math.random();
@@ -879,11 +916,12 @@
 
   function updateFx(dtw, dt) {
     for (var i = comics.length - 1; i >= 0; i--) { comics[i].t += dt; if (comics[i].t > comics[i].dur) comics.splice(i, 1); }
-    for (var j = floorS.length - 1; j >= 0; j--) { floorS[j].t += dtw; if (floorS[j].t > 12) floorS.splice(j, 1); }
+    for (var j = floorS.length - 1; j >= 0; j--) { floorS[j].t += dtw; if (floorS[j].t > 8) floorS.splice(j, 1); }
     for (var f = feedArr.length - 1; f >= 0; f--) { feedArr[f].t += dt; if (feedArr[f].t > 5.5) feedArr.splice(f, 1); }
     // alt şerit
     if (banner) { banner.t += dt; if (banner.t > banner.dur) { banner = null; bannerGap = banners.length > 2 ? 0.6 : 1.6; } }
     else { bannerGap -= dt; if (bannerGap <= 0 && banners.length && S.introT <= 0) banner = banners.shift(); }
+    if (stamp) { stamp.t += dt; if (stamp.t > stamp.dur) stamp = null; }
     if (big) { big.t += dt; if (big.t > big.dur) big = null; }
     else if (bigs.length && S.introT <= 0) big = bigs.shift();
     // buzdolabı kapısı
@@ -1105,7 +1143,7 @@
     var hx = mom.x, hy = 500;
     // balon başın yanında: anne sağdaysa sola, soldaysa sağa açılır (üstteki tabela ve süreye değmez)
     var right = hx < 620;
-    var bx = right ? Math.max(hx + 62, 120) : hx - 62, by = 460, align = right ? 'left' : 'right';
+    var bx = right ? Math.max(hx + 62, 120) : hx - 62, by = 474, align = right ? 'left' : 'right';
     if (mom.x < 0) { bx = 150; hx = 20; align = 'left'; }
     var sc = b.t < 0.18 ? LG.ease.outBack(b.t / 0.18) : 1;
     ctx.save();
@@ -1167,7 +1205,7 @@
       var f = floorS[i];
       var u = Math.min(1, f.t / 0.42);
       var x = LG.lerp(f.x0, f.x1, u), y = LG.lerp(f.y0, f.y1, u) - Math.sin(u * Math.PI) * 70 * f.s;
-      var a = f.t > 10 ? Math.max(0, (12 - f.t) / 2) : 1;
+      var a = f.t > 6.5 ? Math.max(0, (8 - f.t) / 1.5) : 1;
       A.drawSprite(ctx, spr, x, y, LG.lerp(f.r0, f.r1 + 6.283, u), f.s * 0.9, a);
     }
   }
@@ -1192,9 +1230,15 @@
       A.rr(ctx, hx - 16, hy - 8, 32, 30, 10); ctx.fill();
     }
     ctx.restore();
-    var txt = '👥 +' + LG.fmt(hiddenCount) + ' kişi';
-    ui.panel(ctx, x0 - 112, y0 - 26, 224, 50, { r: 25, fill: 'rgba(20,10,40,0.82)', border: 'rgba(255,209,102,0.8)', lineWidth: 3 });
-    ui.text(ctx, txt, x0, y0 + 1, { size: 30, color: '#ffd166', maxWidth: 200 });
+  }
+  // "+87 kişi" etiketi çocukların ÜSTÜNE çizilir (kalabalıkta sayı hep okunsun)
+  var crowdTxt = '', crowdN = -1;
+  function drawCrowdPill(ctx) {
+    if (hiddenCount <= 0) return;
+    if (crowdN !== hiddenCount) { crowdN = hiddenCount; crowdTxt = '👥 +' + LG.fmt(hiddenCount) + ' kişi'; }
+    var x0 = 180, y0 = 1168;
+    ui.panel(ctx, x0 - 112, y0 - 26, 224, 50, { r: 25, fill: 'rgba(20,10,40,0.86)', border: 'rgba(255,209,102,0.8)', lineWidth: 3 });
+    ui.text(ctx, crowdTxt, x0, y0 + 1, { size: 30, color: '#ffd166', maxWidth: 200 });
   }
 
   function drawChalk(ctx) {
@@ -1305,9 +1349,9 @@
       if (!f.w) { ctx.font = ui.font(27, 800); f.w = Math.min(400, ctx.measureText(f.text).width + 64); }
       var y = 792 + i * 48;
       ctx.save(); ctx.globalAlpha = Math.max(0, a);
-      ui.panel(ctx, 12, y - 21, f.w, 42, { r: 21, fill: 'rgba(10,6,28,0.78)', border: false });
-      ui.emoji(ctx, f.icon, 35, y, 26);
-      ui.text(ctx, f.text, 54, y + 1, { size: 27, align: 'left', color: f.color, maxWidth: f.w - 64, strokeWidth: 3 });
+      ui.panel(ctx, 40, y - 21, f.w, 42, { r: 21, fill: 'rgba(10,6,28,0.78)', border: false });
+      ui.emoji(ctx, f.icon, 63, y, 26);
+      ui.text(ctx, f.text, 82, y + 1, { size: 27, align: 'left', color: f.color, maxWidth: f.w - 64, strokeWidth: 3 });
       ctx.restore();
     }
   }
@@ -1315,6 +1359,15 @@
   function drawBannerStrip(ctx) {
     var x = 70, y = 1206, w = 940, h = 82;
     if (!banner) {
+      if (cam.z > 1.01) {
+        // ağır çekim anı: ipucu şeridinin yerinde sinematik etiket
+        var sa = Math.min(1, (cam.z - 1) / 0.1);
+        ctx.save(); ctx.globalAlpha = sa;
+        ui.panel(ctx, 100, 1212, 880, 74, { r: 37, fill: 'rgba(60,0,10,0.85)', border: '#ff5d5d', lineWidth: 4 });
+        ui.text(ctx, '🎬 AĞIR ÇEKİM — TERLİK GELİYOR! 🩴', 540, 1251, { size: 36, color: '#fff', maxWidth: 840 });
+        ctx.restore();
+        return;
+      }
       ui.hintBar(ctx, 100, 1212, 880, HINTS, { h: 74, size: 36 });
       return;
     }
@@ -1415,7 +1468,7 @@
     ui.text(ctx, S.treat.lab + ' kapanlar:', -w / 2 + 40, y, { size: 32, align: 'left', color: '#fff' });
     y += 50;
     if (!sm.winners.length) {
-      ui.text(ctx, sm.reason === 'rain' ? 'Yağmurda ' + LG.fmt(sm.everyone) + ' kişi payını aldı! +1 ' + S.treat.emoji : 'Kimse kapamadı! Anne kazandı 😎', 0, y, { size: 32, color: '#ffb3c1', maxWidth: w - 80 });
+      ui.text(ctx, sm.reason === 'rain' ? 'Yağmurda ' + LG.fmt(sm.everyone) + ' kişi payını aldı! ' + S.treat.emoji : 'Kimse kapamadı! Anne kazandı 😎', 0, y, { size: 32, color: '#ffb3c1', maxWidth: w - 80 });
       y += 50;
     } else {
       var medals = ['🥇', '🥈', '🥉'];
@@ -1457,6 +1510,22 @@
     ui.panel(ctx, 140, 880, 800, 150, { r: 40, fill: 'rgba(20,10,45,0.78)', border: 'rgba(255,209,102,0.7)' });
     ui.text(ctx, '💬 Yorum yaz → pijamalı çocuğun çıksın!', 540, 930 + bob * 0.3, { size: 38, color: '#fff', maxWidth: 740 });
     ui.text(ctx, '🍯 Anne görmeden baklavayı kap!', 540, 984, { size: 32, color: '#ffd166', maxWidth: 740 });
+  }
+
+  // Ekran ortasında kısa damga: anne dönünce "✋ DUR!", işine dönünce "🏃 GİT!" (yeni gelen izleyici kuralı hemen kapar)
+  function drawStamp(ctx) {
+    var s = stamp;
+    if (!s || S.phase !== 'play' || big) return;
+    var u = s.t / s.dur;
+    var sc = s.t < 0.2 ? LG.ease.outBack(s.t / 0.2) : 1 + (s.t - 0.2) * 0.06;
+    var a = u < 0.65 ? 1 : Math.max(0, (1 - u) / 0.35);
+    var sz = s.text === 'DUR!' ? 150 : 118;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.translate(540, 905); ctx.rotate(s.text === 'DUR!' ? -0.07 : 0.05); ctx.scale(sc, sc);
+    ui.emoji(ctx, s.icon, -sz * 1.25, 0, sz * 0.8);
+    ui.text(ctx, s.text, sz * 0.32, 4, { size: sz, color: s.col, strokeWidth: sz * 0.15, strokeColor: '#1a0510' });
+    ctx.restore();
   }
 
   function drawRain(ctx) {
@@ -1509,6 +1578,7 @@
     drawFlights(ctx);
     drawComics(ctx);
     drawTags(ctx);
+    drawCrowdPill(ctx);
     // kazananların isimleri (buzdolabında / yolda)
     for (var e = 0; e < S.winners.length; e++) {
       var wk = S.winners[e];
@@ -1525,7 +1595,6 @@
       ctx.globalAlpha = Math.min(1, va);
       ctx.drawImage(vignette(), 0, 0, W, LG.H);
       ctx.restore();
-      ui.text(ctx, '🎬 AĞIR ÇEKİM', 540, 1166, { size: 36, color: 'rgba(255,255,255,' + Math.min(1, va) + ')' });
     }
     // kırmızı ışıkta ekran kenarı kızarır
     if (isRed()) {
@@ -1535,6 +1604,7 @@
       ctx.strokeRect(13, 220, W - 26, 1090);
       ctx.restore();
     }
+    drawStamp(ctx);
     drawHud(ctx);
     drawFeed(ctx);
     drawAttract(ctx);

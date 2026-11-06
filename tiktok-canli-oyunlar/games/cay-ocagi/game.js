@@ -46,7 +46,7 @@
   var PILL = { x: 960, y: 268, on: true };
   var LIKEBAR = { x: 296, y: 368, w: 488, h: 38 };
   var HINT = { x: 120, y: 1226, w: 840, h: 66 };
-  var RIB = { y: 1180, h: 62 };
+  var RIB = { y: 1259, h: 62 }; // teşekkür şeridi ipucu şeridinin yerinde görünür (son sıra masaların isimleri kapanmasın)
   var CARD = { x: 56, y: 410, w: 968, h: 196 };
   var BOARD_ALT = null;
   var CAM = LG.CAM;
@@ -165,7 +165,7 @@
         if (roll < 0.09) r.v = LG.randi(10, 30); else if (roll < 0.3) r.v = LG.randi(3, 9);
       }
     } else if (now - (r.l || 0) > 2 * 3600 * 1000) r.v++;
-    r.l = now; r.n = u.name;
+    r.l = now;
     if (!r.f) r.f = {};
     d.rec = r; d.lvl = lvlOf(r);
     if (!sim) dirty = true;
@@ -187,7 +187,11 @@
     t.n++; treats.set(from.id, t);
     if (to && to.id !== from.id) {
       var key = from.id + '>' + to.id;
-      var p = pairs.get(key) || { a: from, b: to, n: 0 };
+      var p = pairs.get(key);
+      if (!p) {
+        p = { a: from, b: to, n: 0 };
+        if (pairs.size > 4000) pairs.delete(pairs.keys().next().value);
+      }
       p.n++; pairs.set(key, p);
     }
   }
@@ -300,7 +304,7 @@
       if (!t.shown) {
         t.shown = true; t.showT = 0;
         LG.sfx('whoosh');
-        ui.float('Yeni masa açıldı! 🪑', t.x, t.y - 40, { color: '#ffe3a3', size: 30 });
+        wfloat('Yeni masa açıldı! 🪑', t.x, t.y - 40, { color: '#ffe3a3', size: 30 });
         return t;
       }
     }
@@ -376,7 +380,7 @@
     var key = pre + '|' + c.user.name + '|' + st;
     if (key === c.tagKey) return;
     c.tagKey = key;
-    c.tag = { id: c.user.id + '#' + pre, name: pre + shortName(c.user.name, 10) };
+    c.tag = { id: c.user.id + '#' + pre, name: pre + shortName(c.user.name, 9) };
     // konuşurken/sipariş verirken unvan da görünür: "☕ ayse · Müdavim"
     c.tagA = st ? { id: c.user.id + '#a' + pre + st, name: pre + shortName(c.user.name, 12) + ' · ' + st } : c.tag;
   }
@@ -472,7 +476,7 @@
     if (text) sayCust(c, text, 1.6);
     if (pay) {
       LG.sfx('coin');
-      ui.float('🪙', c.seat.x, c.seat.t.y - 70, { size: 34, vy: -90 });
+      wfloat('🪙', c.seat.x, c.seat.t.y - 70, { size: 34, vy: -90 });
     }
   }
   function payAndLeave(c) {
@@ -494,11 +498,13 @@
     while (chatList.length > 13) { var old = chatList.shift(); old.bub = null; }
   }
   function refreshOrderImg(c) {
-    if (!c.od && !c.of) { c.ordImg = null; c.ordMini = null; return; }
+    // "Herkese çay" turundaki siparişler balon göstermez (48 balon ekranı boğuyordu)
+    var od = c.od && !c.od.round ? c.od : null, of = c.of && !c.of.round ? c.of : null;
+    if (!od && !of) { c.ordImg = null; c.ordMini = null; return; }
     var txt, mini;
-    if (c.od && c.of) { txt = c.od.label + ' ' + c.od.icon + ' + ' + c.of.icon; mini = c.od.icon + c.of.icon; }
-    else { var o = c.od || c.of; txt = o.label + ' ' + o.icon; mini = o.icon; }
-    var gift = (c.od && c.od.gift) || (c.of && c.of.gift);
+    if (od && of) { txt = od.label + ' ' + od.icon + ' + ' + of.icon; mini = od.icon + of.icon; }
+    else { var o = od || of; txt = o.label + ' ' + o.icon; mini = o.icon; }
+    var gift = (od && od.gift) || (of && of.gift);
     c.ordImg = A.bubble(txt, { size: 20, bg: gift ? '#fff2b8' : '#fff1d6', border: '#c98b4a', maxW: 260 });
     c.ordMini = A.bubble(mini, { size: 17, bg: gift ? '#fff2b8' : '#fff1d6', border: '#c98b4a' });
   }
@@ -596,8 +602,9 @@
       c.glow = o.round ? 1.4 : 4.5;
       if (!o.round) sayCust(c, LG.pick(D.THANKS).replace('{n}', o.from.name), 3.2);
     }
-    if (o.kind === 'kahve') {
-      sayCust(c, 'Fincanı kapat, falına sonra bakarız 😄', 3.6, { name: '☕ Çaycı', bg: '#fffbe8', nameColor: '#7a1f12', maxW: 460 });
+    if (o.kind === 'kahve' && (o.gift || Math.random() < 0.35)) {
+      // Hediye kahvesinde her zaman, yorumla gelen kahvede ara sıra (balon kalabalığı olmasın)
+      sayCust(c, 'Fincanı kapat, falına sonra bakarız 😄', 3.6, { name: '☕ Çaycı', bg: '#fffbe8', nameColor: '#7a1f12', maxW: 440 });
       c.falAt = LG.time + 24;
     }
     if (o.round && round && round.id === o.round) round.done++;
@@ -833,6 +840,7 @@
   function callSimitci() { if (!simitci.on && simitci.wait <= 0) simitci.wait = 1.0; }
   function simitAll(from) {
     simitci.all = new Set();
+    simitci.pass = 0;
     simitci.from = from || null;
     if (!simitci.on) simitci.wait = 0.4;
   }
@@ -883,8 +891,13 @@
       }
     }
     if (s.x > W + 100 || s.x < -100) {
-      s.on = false; s.dir = -s.dir; s.all = null; s.from = null;
-      var more = false;
+      s.on = false; s.dir = -s.dir;
+      var missed = false;
+      if (s.all && ++s.pass < 2) {
+        for (var q = 0; q < custs.length; q++) { var mc = custs[q]; if (mc.leaving < 0 && LG.time >= mc.born && !s.all.has(mc)) { missed = true; break; } }
+      }
+      if (!missed) { s.all = null; s.from = null; }
+      var more = missed;
       for (var m = 0; m < orders.length; m++) if (orders[m].by === 'simitci' && !orders[m].claimed) { more = true; break; }
       s.wait = more ? 1.2 : 0;
     }
@@ -957,7 +970,7 @@
             sayCust(tc, LG.pick(['Pisi pisi! 🐈', 'Gel bakalım Sarman 😻', 'Kedi bana geldi! 🐈']), 3);
             catSay(LG.pick(['Miyav 💕', 'Mrrr 😽', 'Miyav! 🐾']));
             LG.sfx('heart');
-            ui.float('💕', cat.x, cat.y - 70, { size: 34, vy: -80 });
+            wfloat('💕', cat.x, cat.y - 70, { size: 34, vy: -80 });
           } else {
             cat.st = 'up';
             cat.jump = { x0: cat.x, y0: cat.y, x1: CUSHION.x, y1: CUSHION.y, t: 0, dur: 0.45 };
@@ -967,7 +980,7 @@
       }
       case 'sit':
         cat.sitT -= dt;
-        if (Math.random() < dt * 0.8) ui.float('💕', cat.x + LG.rand(-10, 10), cat.y - 60, { size: 24, vy: -70, life: 1.2 });
+        if (Math.random() < dt * 0.8) wfloat('💕', cat.x + LG.rand(-10, 10), cat.y - 60, { size: 24, vy: -70, life: 1.2 });
         if (cat.sitT <= 0 || !cat.target || cat.target.leaving >= 0) { cat.st = 'back'; cat.path = route(cat, CAT_FLOOR); cat.target = null; }
         break;
     }
@@ -1000,7 +1013,7 @@
         LG.sfx('tick');
         var key = d.a + '-' + d.b, nm = D.DICE_NAMES[key];
         var dbl = d.a === d.b;
-        ui.float((nm || (d.a + ' · ' + d.b)) + (d.c.npc ? '' : ''), d.x1, d.y1 - 60, { color: dbl ? '#ffd166' : '#fff3d6', size: dbl ? 40 : 30, life: 1.8 });
+        wfloat((nm || (d.a + ' · ' + d.b)), d.x1, d.y1 - 60, { color: dbl ? '#ffd166' : '#fff3d6', size: dbl ? 40 : 30, life: 1.8 });
         if (dbl) { LG.sfx(d.a === 6 ? 'win' : 'correct'); ui.burst(d.x1, d.y1 - 20, { count: d.a === 6 ? 40 : 18, speed: 380, up: 200 }); }
         if (d.c.leaving < 0 && Math.random() < 0.7 && !d.c.npc) sayCust(d.c, dbl ? LG.pick(['Çift geldi! 🎲', 'Oley, ' + (nm || 'çift') + '!']) : LG.pick(['Hadi bakalım 🎲', 'Zar benden!', 'Bu el benim 😎']), 2.4);
       }
@@ -1235,7 +1248,7 @@
     var B = boardRect();
     var c = byId.get(u.id);
     var x = side === 'a' ? B.x + 90 : B.x + B.w - 90;
-    ui.float('+1', x + LG.rand(-30, 30), B.y + 112, { color: side === 'a' ? '#ffb09a' : '#9fdcff', size: 30, vy: -60, life: 0.9 });
+    wfloat('+1', x + LG.rand(-30, 30), B.y + 112, { color: side === 'a' ? '#ffb09a' : '#9fdcff', size: 30, vy: -60, life: 0.9 });
     if (c) c.pop = 1;
   }
   function endTopic() {
@@ -1270,7 +1283,7 @@
   // ===========================================================================
   // Teşekkür şeridi ve büyük kartlar
   // ===========================================================================
-  var ribQ = [], rib = null;
+  var ribQ = [], rib = null, ribGap = 0;
   function banner(text, o) {
     o = o || {};
     if (o.key) {
@@ -1301,6 +1314,24 @@
   function sweatDrop(w) {
     if (sweat.length > 40) return;
     sweat.push({ x: w.x - w.face * 6, y: w.y - 136 * w.s, vx: -w.face * LG.rand(60, 160) + LG.rand(-40, 40), vy: LG.rand(-260, -140), t: 0 });
+  }
+  // Sahne içi uçan yazılar (zar sonucu, kalp, +1...). LG.ui.float üst katmanda çizildiği için
+  // büyük teşekkür kartlarının üstüne biniyordu; bunlar kartların ALTINDA çizilir.
+  var wfl = [];
+  function wfloat(text, x, y, o) {
+    o = o || {};
+    if (wfl.length > 60) wfl.shift();
+    wfl.push({ text: text, x: x, y: y, t: 0, life: o.life || 1.6, color: o.color || '#fff', size: o.size || 44, vy: o.vy || -120 });
+  }
+  function updWfloat(dt) {
+    for (var i = wfl.length - 1; i >= 0; i--) { var f = wfl[i]; f.t += dt; f.y += f.vy * dt; if (f.t >= f.life) wfl.splice(i, 1); }
+  }
+  function drawWfloat(g) {
+    for (var i = 0; i < wfl.length; i++) {
+      var f = wfl[i];
+      var sc = f.t < 0.15 ? LG.ease.outBack(f.t / 0.15) : 1;
+      ui.text(g, f.text, f.x, f.y, { size: Math.max(4, f.size * sc), color: f.color, alpha: 1 - f.t / f.life });
+    }
   }
 
   // ===========================================================================
@@ -1377,7 +1408,7 @@
       c.last = LG.time;
       if (heartBudget >= 1) {
         heartBudget--;
-        ui.float('❤', c.seat.x + LG.rand(-12, 12), c.seat.t.y - (c.seat.side === 'back' ? 92 : 80), { color: '#ff4d6d', size: 30, vy: -110, life: 1.1 });
+        wfloat('❤', c.seat.x + LG.rand(-12, 12), c.seat.t.y - (c.seat.side === 'back' ? 92 : 80), { color: '#ff4d6d', size: 30, vy: -110, life: 1.1 });
       }
     }
     if (likeGoal.v >= likeGoal.target) {
@@ -1400,12 +1431,8 @@
     var c = seatUser(u, { isNew: e.isNew });
     if (c) { c.last = LG.time; c.activeT = LG.time; c.pop = 1; }
     var gEmoji = LG.giftEmoji(g);
-    // Not: LG.ui.spotlightAllowed yumuşak sınırı bu hediyeyi de sayarak kontrol ediyor (10.000+ tek hediye hep "sınır aşıldı" olur).
-    // Bu yüzden kontrol sırasında bu hediyenin jetonunu geçici olarak düşüyoruz; sonraki hediyelerde sınır yine işler.
-    var savedCoins = u.coins;
-    u.coins = Math.max(0, u.coins - (g.total || 0));
+    // Büyük ekran anları için ortak kural (bekleme süresi, oturum yumuşak sınırı, sunucunun sadeleştir komutu)
     var spotOk = tier < 3 || ui.spotlightAllowed(u, tier);
-    u.coins = savedCoins;
     if (!spotOk) {
       // Aynı kişiden art arda büyük hediye: ekranı tekellemeden sade teşekkür
       treatRandom(u, Math.min(3, g.count));
@@ -1432,7 +1459,7 @@
       ui.shake(12, 0.5);
       LG.sfx('mega');
       bigCard({ title: gen(name) + ' masası açıldı!', sub: 'Altın masa bu akşam senin 👑 Herkese çay! Teşekkürler 💖', user: u, icon: gEmoji, mega: true });
-      if (t) ui.float('👑 VIP', t.x, t.y - 120, { color: '#ffd400', size: 44 });
+      if (t) wfloat('👑 VIP', t.x, t.y - 120, { color: '#ffd400', size: 44 });
     } else if (tier >= 4) {
       herkese(u, 'gift');
       simitAll(u);
@@ -1443,8 +1470,8 @@
       herkese(u, 'gift');
       bigCard({ title: isTea ? 'HERKESE ÇAY BENDEN! 🫖' : 'HERKESE ÇAY BENDEN!', sub: name + ' ısmarladı · Sağ ol ' + name + '! 💖', user: u, icon: gEmoji });
     } else if (tier >= 2) {
-      if (c) placeOrder(c, DEF_KAHVE, { gift: true, prio: 4, silent: true, label: '1 kahve' });
-      if (c) c.glow = 5;
+      if (c) { placeOrder(c, DEF_KAHVE, { gift: true, prio: 4, silent: true, label: '1 kahve + lokum' }); c.glow = 5; }
+      else if (u.data.cay) u.data.cay.pend = DEF_KAHVE;
       banner(isCoffee ? name + ', Türk kahveni aldık! Lokumu da yanında ☕' : name + ', sana bir Türk kahvesi + lokum! ☕', { icon: gEmoji, user: u, key: 'k' + u.id, sub: 'Teşekkürler 💖' });
       LG.sfx('coin');
     } else {
@@ -1611,7 +1638,7 @@
       }
       if (c.falAt && LG.time >= c.falAt) {
         c.falAt = 0;
-        sayCust(c, LG.pick(D.FAL), 4.5, { name: '🔮 Fincanında', bg: '#f6ecff', nameColor: '#6a3d9a', maxW: 460 });
+        sayCust(c, LG.pick(D.FAL), 4.5, { name: '🔮 ' + shortName(c.user.name, 12) + ' · fincanında', bg: '#f6ecff', nameColor: '#6a3d9a', maxW: 440 });
       }
       if (!c.npc && !c.vip && LG.time - c.last > IDLE_LEAVE) leave(c, 'Hesap! İyi akşamlar 👋');
     }
@@ -1637,6 +1664,7 @@
     updDice(dt);
     updNpc(dt);
     updRockets(dt);
+    updWfloat(dt);
 
     // herkese çay turu
     if (round) {
@@ -1678,14 +1706,15 @@
     for (var ni = notes.length - 1; ni >= 0; ni--) { var nt = notes[ni]; nt.t += dt; nt.y -= 48 * dt; if (nt.t > nt.life) notes.splice(ni, 1); }
 
     // şerit + kartlar
-    if (!rib && ribQ.length) { rib = ribQ.shift(); rib.t = 0; if (ribQ.length > 3) rib.dur *= 0.6; }
-    if (rib) { rib.t += dt; if (rib.t >= rib.dur) rib = null; }
+    if (ribGap > 0) ribGap -= dt;
+    if (!rib && ribQ.length && (ribGap <= 0 || ribQ.length > 1 || ribQ[0].big)) { rib = ribQ.shift(); rib.t = 0; if (ribQ.length > 3) rib.dur *= 0.6; }
+    if (rib) { rib.t += dt; if (rib.t >= rib.dur) { rib = null; ribGap = ribQ.length ? 0.25 : 1.6; } }
     if (!card && cardQ.length) { card = cardQ.shift(); card.t = 0; }
     if (card) { card.t += dt; if (card.t >= card.dur) card = null; }
 
     // kayıt
     saveT += dt;
-    if (saveT > 8) { saveT = 0; save(); }
+    if (saveT > 15) { saveT = 0; save(); }
   }
 
   // ===========================================================================
@@ -1976,9 +2005,60 @@
     } else g.drawImage(b.c, bx, by);
   }
   var TAG_MAX = 28, TAGSORT = [], tagTimer = 0;
+  // --- balon çakışma önleme (kalabalıkta okunaklılık) ---
+  var PLACED = [], bubFrame = 0;
+  function bubRect(b, x, y) { return { x: clamp(x - b.ax, 6, W - 6 - b.w), y: y - b.ay, w: b.w, h: b.h - 10 }; }
+  function overlapA(r, q) {
+    var ox = Math.min(r.x + r.w, q.x + q.w) - Math.max(r.x, q.x);
+    var oy = Math.min(r.y + r.h, q.y + q.h) - Math.max(r.y, q.y);
+    return ox > 0 && oy > 0 ? ox * oy : 0;
+  }
+  // Yerleştirebilirse kayma miktarını (<=0), yer yoksa null döndürür
+  function placeRect(r, maxUp) {
+    var y0 = r.y;
+    for (var tries = 0; tries < 3; tries++) {
+      var worst = 0, hit = null;
+      for (var i = 0; i < PLACED.length; i++) { var a = overlapA(r, PLACED[i]); if (a > worst) { worst = a; hit = PLACED[i]; } }
+      if (worst <= r.w * r.h * 0.1) { PLACED.push(r); return r.y - y0; }
+      var ny = hit.y - r.h - 3;
+      if (y0 - ny > maxUp || ny < 240) return null;
+      r.y = ny;
+    }
+    return null;
+  }
+  function sayRect(s, x, y) { if (s) PLACED.push(bubRect(s.img, x, Math.max(y, 270))); }
+  function layoutBubbles() {
+    bubFrame++;
+    PLACED.length = 0;
+    sayRect(cayci.say, cayci.x, cayci.y - 160);
+    sayRect(cirak.say, cirak.x, cirak.y - 150);
+    if (simitci.on) sayRect(simitci.say, simitci.x, simitci.y - 190);
+    if (cat.say) sayRect(cat.say, cat.x, cat.y - 76);
+    for (var i = chatList.length - 1; i >= 0; i--) {
+      var c = chatList[i];
+      if (!c.bub || LG.time < c.born) continue;
+      var a = anchorOf(c);
+      var dy = placeRect(bubRect(c.bub.img, a.x, a.chat), 46);
+      if (dy === null) continue;
+      c._bsF = bubFrame; c._bdy = dy;
+    }
+  }
+  // Kapıda yer bekleyenlerin adları (masalar doluyken bile adın 1 sn içinde görünsün)
+  function drawDoorQueue(g, t) {
+    if (!doorQ.length) return;
+    var n = Math.min(3, doorQ.length), cx = DOOR.x + DOOR.w / 2;
+    for (var i = 0; i < n; i++) {
+      var u = doorQ[doorQ.length - 1 - i];
+      var d = u.data.cay || (u.data.cay = {});
+      if (!d.dtag || d.dtagN !== u.name) { d.dtag = { id: u.id + '#kapi', name: '🚪 ' + shortName(u.name, 9) }; d.dtagN = u.name; }
+      g.globalAlpha = i === 0 ? 1 : i === 1 ? 0.8 : 0.6;
+      ui.drawNameTag(g, d.dtag, cx, DOOR.y + 40 + i * 30, 18, '#ffe9c4', 'rgba(60,25,8,0.92)');
+    }
+    g.globalAlpha = 1;
+  }
   function anchorOf(c) {
     var s = c.seat;
-    return s.side === 'back' ? { x: s.x, y: s.t.y - 120, chat: s.t.y - 94, tag: s.t.y - 103 } : { x: s.x, y: s.t.y - 82, chat: s.t.y - 82, tag: s.t.y + 57 };
+    return s.side === 'back' ? { x: s.x, tx: s.x + (s.k === 0 ? -7 : 7), y: s.t.y - 120, chat: s.t.y - 94, tag: s.t.y - 103 } : { x: s.x, tx: s.x, y: s.t.y - 82, chat: s.t.y - 82, tag: s.t.y + 57 };
   }
   function drawTop(g, t) {
     var i, c, an;
@@ -2013,23 +2093,25 @@
       TAGSORT.sort(function (p, q) { return q.activeT - p.activeT; });
       for (i = 0; i < TAGSORT.length; i++) TAGSORT[i].showTag = i < TAG_MAX;
     }
+    // Balon yerleşimi: yeni balonlar öncelikli; üst üste binen eski balon biraz yukarı kayar, yer yoksa gizlenir
+    layoutBubbles();
     for (i = 0; i < custs.length; i++) {
       c = custs[i];
       an = custAnim(c);
-      if (!an || c.bub && c.seat.side === 'back') continue;
+      if (!an || (c._bsF === bubFrame && c.seat.side === 'back')) continue;
       if (!c.npc && !c.vip && c.showTag === false && c.leaving < 0) continue;
       var ap = anchorOf(c);
       var st = tagStyle(c);
       var active = LG.time - c.activeT < 3 && c.leaving < 0;
       if (active) continue;
       g.globalAlpha = an.a;
-      ui.drawNameTag(g, c.tag, ap.x, ap.tag + an.dy, 19, st[0], st[1]);
+      ui.drawNameTag(g, c.tag, ap.tx, ap.tag + an.dy, 19, st[0], st[1]);
     }
     g.globalAlpha = 1;
     // sipariş balonları (4 sn sonra küçük simgeye döner)
     for (i = 0; i < custs.length; i++) {
       c = custs[i];
-      if (!c.ordImg || c.bub || c.leaving >= 0 || LG.time < c.born) continue;
+      if (!c.ordImg || c._bsF === bubFrame || c.leaving >= 0 || LG.time < c.born) continue;
       var a2 = anchorOf(c);
       var ot = Math.max(c.od ? c.od.t : 0, c.of ? c.of.t : 0);
       var fresh = LG.time - ot < 4;
@@ -2039,20 +2121,23 @@
     // aktif isimler (büyük)
     for (i = 0; i < custs.length; i++) {
       c = custs[i];
-      if (LG.time - c.activeT >= 3 || c.leaving >= 0 || LG.time < c.born || (c.bub && c.seat.side === 'back')) continue;
+      if (LG.time - c.activeT >= 3 || c.leaving >= 0 || LG.time < c.born || (c._bsF === bubFrame && c.seat.side === 'back')) continue;
       var a3 = anchorOf(c), st3 = tagStyle(c);
-      ui.drawNameTag(g, c.tagA || c.tag, a3.x, a3.tag, 23, st3[0], st3[1]);
+      var ak = LG.time - c.activeT, asc = ak < 0.25 ? 0.6 + 0.4 * LG.ease.outBack(ak / 0.25) : 1;
+      if (asc !== 1) { g.save(); g.translate(a3.tx, a3.tag); g.scale(asc, asc); ui.drawNameTag(g, c.tagA || c.tag, 0, 0, 25, st3[0], st3[1]); g.restore(); }
+      else ui.drawNameTag(g, c.tagA || c.tag, a3.tx, a3.tag, 25, st3[0], st3[1]);
     }
+    drawDoorQueue(g, t);
     // konuşma balonları (yeni olan üstte)
     for (i = 0; i < chatList.length; i++) {
       c = chatList[i];
-      if (!c.bub) continue;
+      if (!c.bub || c._bsF !== bubFrame) continue;
       an = custAnim(c);
       if (!an) continue;
       var a4 = anchorOf(c);
       var age = LG.time - c.bub.t, life = c.bub.life;
       g.globalAlpha = Math.min(1, (life - age) / 0.35) * an.a;
-      drawBub(g, c.bub.img, a4.x, a4.chat + an.dy, c.bub.t);
+      drawBub(g, c.bub.img, a4.x, a4.chat + an.dy + c._bdy, c.bub.t);
       g.globalAlpha = 1;
     }
     // çalışanların balonları
@@ -2321,7 +2406,8 @@
       var vl = '🗣️ ' + topic.A.say + ' / ' + topic.B.say + ' yaz → oy ver';
       lines = [vl, HINTS[0], vl, HINTS[2], vl, HINTS[1], vl, HINTS[3]];
     }
-    ui.hintBar(ctx, HINT.x, HINT.y, HINT.w, lines, { h: HINT.h, size: 36, fill: 'rgba(36,16,6,0.85)', border: 'rgba(255,205,130,0.55)' });
+    // İpucu şeridi ile teşekkür şeridi aynı yuvayı paylaşır: şerit yokken ipuçları döner
+    if (!rib || rib.t < 0.12 || rib.t > rib.dur - 0.12) ui.hintBar(ctx, HINT.x, HINT.y, HINT.w, lines, { h: HINT.h, size: 36, fill: 'rgba(36,16,6,0.85)', border: 'rgba(255,205,130,0.55)' });
     drawRibbon(ctx, t);
     var megaCard = card && card.mega;
     if (megaCard) drawFlying(ctx);

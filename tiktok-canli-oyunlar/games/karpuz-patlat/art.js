@@ -410,15 +410,7 @@
     // çatlaklar
     A.drawCracks(ctx, g, F, st.cracks, st.pv, st.tease);
     // yüzeyden süzülen damlalar
-    var drips = st.drips;
-    if (drips && drips.length) {
-      for (var d = 0; d < drips.length; d++) {
-        var dp = drips[d];
-        if (dp.st) continue;
-        var q = A.sp(g, dp.p, dp.v);
-        teardrop(ctx, q.x, q.y, dp.r, F.juice);
-      }
-    }
+    if (st.drips) A.drawDrips(ctx, g, st.drips, F.juice);
     ctx.restore();
     // dış çizgi
     A.outline(ctx, g);
@@ -440,6 +432,14 @@
     ctx.globalAlpha = 1;
   };
 
+  A.drawDrips = function (ctx, g, drips, color) {
+    for (var d = 0; d < drips.length; d++) {
+      var dp = drips[d];
+      if (dp.st) continue;
+      var q = A.sp(g, dp.p, dp.v);
+      teardrop(ctx, q.x, q.y, dp.r, color);
+    }
+  };
   function teardrop(ctx, x, y, r, color) {
     ctx.fillStyle = color;
     ctx.beginPath(); ctx.arc(x, y, r, 0, PI); ctx.lineTo(x, y - r * 2.5); ctx.closePath(); ctx.fill();

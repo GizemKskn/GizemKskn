@@ -13,8 +13,12 @@
  * Beğeni  : JOKER çubuğu dolar → sıradaki çoktan seçmeli soruda YARI YARIYA (iki yanlış şık gider).
  * Hediye  : 1. kademe kalp + teşekkür; 2+ SÜPER JOKER (herkes için bir yanlış şık silinir ya da
  *           bir harf açılır); 4+ ÇİFTE PUAN TURU (sıradaki soru herkese x2). Hediye, gönderenin
- *           puanını ASLA değiştirmez — tamamen topluluk yararına.
+ *           puanını ASLA değiştirmez — tamamen topluluk yararına. Etkisi olmayan küçük hediyeler
+ *           üst şeridi kapatmaz, ipucu şeridinde toplu teşekkür alır; 5+ kademe büyük altın afiş.
  * Takip / paylaşım : teşekkür + joker çubuğuna katkı.
+ * Kalabalık: çoktan seçmelide cevap verenlerin adları "isim şeridinde" (saniyede ~7) akar; kelime
+ *           modlarında tahmin kartları saniyede ~6 güncellenir. Tek yorumda birden çok aday cevap
+ *           ("rize trabzon ordu") kabul edilmez. Eşit puanda toplam cevap süresi az olan önde.
  * Kısayollar: N sıradaki soru, B cevabı göster, K soruyu değiştir, T +10 sn, J jokeri doldur, R yeni tur.
  */
 (function () {
@@ -301,7 +305,7 @@
     applyMult(Q);
     if (pendingDouble) {
       Q.double = pendingDouble; pendingDouble = null; applyMult(Q);
-      pushBanner({ icon: '⚡', title: 'ÇİFTE PUAN TURU!', sub: Q.double.name + ' sayesinde bu soru herkese x' + Q.mult + ' 💖', col: '#ffc233', user: Q.double, dur: 2.8, prio: 2 });
+      pushBanner({ icon: '⚡', title: 'ÇİFTE PUAN TURU!', sub: Q.double.name + ' sayesinde bu soru herkese x' + Q.mult + ' 💖', col: '#ffc233', user: Q.double, dur: 2.8, prio: 2, q: Q });
       LG.sfx('fanfare');
       ui.burst(W / 2, CARD.y + 40, { count: 70, speed: 800 });
     }
@@ -311,7 +315,7 @@
     hintAnchor = now();
     LG.sfx('whoosh');
     if (qNum === Q_PER_ROUND) {
-      pushBanner({ icon: '🏁', title: 'FİNAL SORUSU!', sub: 'Puanlar x' + Q.mult + ' — sıralama son anda değişebilir!', col: '#ffc233', dur: 2.8, prio: 2 });
+      pushBanner({ icon: '🏁', title: 'FİNAL SORUSU!', sub: 'Puanlar x' + Q.mult + ' — sıralama son anda değişebilir!', col: '#ffc233', dur: 2.8, prio: 2, q: Q });
       LG.sfx('levelup');
       ui.burst(W / 2, CARD.y + 20, { count: 50, speed: 700, colors: ['#ffc233', '#ff7a1c', '#ffffff'] });
     }
@@ -321,6 +325,9 @@
   function replaceQuestion() {
     if (!Q) return;
     var keepDouble = Q.double;
+    // bu soruda harcanan jokerler kaybolmasın: yeni soruya devret
+    if (Q.half) { joker.armed = true; joker.v = 1; joker.shown = 1; }
+    if (Q.removedBySuper || Q.superLetters) pendingSuper = 1;
     Q = makeQuestion(Q.mode, qNum);
     Q.double = keepDouble; applyMult(Q);
     lastSec = -1; setTempo(false);
@@ -339,7 +346,7 @@
         joker.armed = false; joker.v = 0.08; joker.shown = 0.08;
         joker.target = Math.min(6000, Math.round(joker.target * 1.45)); // kalabalık yayında her soru kolaylaşmasın
         Q.half = true;
-        pushBanner({ icon: '🃏', title: 'YARI YARIYA!', sub: 'Beğenileriniz sayesinde iki yanlış şık gitti ❤️', col: '#ff4d6d', dur: 2.6 });
+        pushBanner({ icon: '🃏', title: 'YARI YARIYA!', sub: 'Beğenileriniz sayesinde iki yanlış şık gitti ❤️', col: '#ff4d6d', dur: 2.6, q: Q });
         LG.sfx('zap');
       }
     }
@@ -672,7 +679,8 @@
     var tier = g.tier, em = LG.giftEmoji(g);
     if (tier <= 1) {
       thanksFeed(u, g, em);
-      for (var k = 0; k < Math.min(3, g.count); k++) ui.float('❤', LG.rand(160, 920), LG.rand(1020, 1110), { color: '#ff4d6d', size: 50, vy: -170, life: 1.8 });
+      // kalpler kenarlardan yükselir (ortadaki isim şeridini kapatmasın)
+      for (var k = 0; k < Math.min(3, g.count); k++) ui.float('❤', Math.random() < 0.5 ? LG.rand(40, 90) : LG.rand(990, 1040), LG.rand(1060, 1140), { color: '#ff4d6d', size: 50, vy: -190, life: 1.8 });
       LG.sfx('heart');
       return;
     }
@@ -856,7 +864,9 @@
       joker.heartT = Math.min(joker.heartT, 4) - dt * 6;
       if (Math.random() < dt * 9) ui.float('❤', LG.rand(780, 1010), TOP.y + 70, { color: '#ff4d6d', size: 30, vy: -60, life: 0.9 });
     }
-    // afiş
+    // afiş — belirli bir soruya ait afiş, soru değiştiyse (sunucu atladıysa) gösterilmez
+    for (var bi = banners.length - 1; bi >= 0; bi--) if (banners[bi].q && banners[bi].q !== Q) banners.splice(bi, 1);
+    if (banner && banner.q && banner.q !== Q && banner.t < banner.dur - 0.3) banner.t = banner.dur - 0.3;
     if (!banner && banners.length) {
       banner = banners.shift(); banner.t = 0;
       if (banners.length >= 2) banner.dur = Math.min(banner.dur, 1.9);
@@ -1365,7 +1375,7 @@
     var y = TICK.y, h = TICK.h, rv = Q.revealedAt != null;
     ui.panel(ctx, TICK.x, y, TICK.w, h, { r: h / 2, fill: 'rgba(10,6,40,0.62)', border: rv ? 'rgba(31,209,154,0.6)' : 'rgba(255,255,255,0.16)', lineWidth: 3 });
     if (!Q.tick.length) {
-      var msg = rv ? '😅 Bu soruyu bilen olmadı — sıradakinde sen bil!' : '💬 a, b, c ya da d yaz — adın burada görünsün!';
+      var msg = rv ? '😅 Bu soruyu bilen olmadı — sıradakinde sen bil!' : '✨ Cevap yazanların adı burada parlar — ilk sen ol!';
       ui.text(ctx, msg, TICK.x + TICK.w / 2, y + h / 2 + 1, { size: 30, color: 'rgba(255,255,255,0.85)', maxWidth: TICK.w - 40, strokeWidth: 4 });
       return;
     }
@@ -1494,6 +1504,7 @@
       var slide = (1 - ease.outCubic(clamp(p / 0.3, 0, 1))) * 40;
       ui.panel(ctx, HINT.x, y, HINT.w, HINT.h, { r: HINT.h / 2, fill: 'rgba(20,8,60,0.88)', border: feedCur.col, lineWidth: 4 });
       ctx.save();
+      ui.roundRect(ctx, HINT.x, y, HINT.w, HINT.h, HINT.h / 2); ctx.clip(); // kayarken şeridin dışına taşmasın
       ctx.globalAlpha = Math.max(0, a);
       emo(ctx, feedCur.icon, HINT.x + 44, y + HINT.h / 2 + slide, 38);
       ui.text(ctx, feedCur.text, HINT.x + HINT.w / 2 + 24, y + HINT.h / 2 + 2 + slide, { size: 33, color: feedCur.col, maxWidth: HINT.w - 110 });
@@ -1538,10 +1549,10 @@
         ui.roundRect(ctx, cx + 14, LB.y + 6, 54, 28, 14); ctx.fillStyle = '#ff6a00'; ctx.fill();
         ui.text(ctx, '🔥' + st, cx + 41, LB.y + 21, { size: 20, color: '#fff', strokeWidth: 3 });
       }
-      var tag = ui.nameTag(u, 22);
+      var tag = ui.nameTag(u, 24);
       var tw = Math.min(tag.width, 170);
       ctx.drawImage(tag, Math.round(cx - tw / 2), Math.round(LB.y + 88 - tag.height / 2), tw, tag.height);
-      ui.text(ctx, LG.fmt(e.score), cx, LB.y + 114, { size: 25, color: '#ffc233', strokeWidth: 4 });
+      ui.text(ctx, LG.fmt(e.score), cx, LB.y + 114, { size: 27, color: '#ffc233', strokeWidth: 4 });
     }
   }
 

@@ -13,13 +13,15 @@
   var clamp = LG.clamp, lerp = LG.lerp, rand = LG.rand, pick = LG.pick;
 
   ui.celebrateEnabled = false; // kendi dolmuş temalı teşekkür bandımız var
-  ui.toastPos = { x: 52, y: 1190 };
+  // Ortak bildirimler yukarı doğru 5 tane yığılıp dolmuşu kapatıyordu: kendi kompakt
+  // bildirimlerimizi çiziyoruz (en fazla 2 satır, aynı türdekiler birleşir).
+  ui.toastsEnabled = false;
 
   // Sahne ölçüleri
   var GROUND = 1048;             // tekerlek tabanı
   var BUS_X = 540, BUS_Y = GROUND - 50;
   var ROAD_TOP = 1000, ROAD_BOT = 1094;
-  var STOP_X = 812;              // durakta tabelanın duracağı x
+  var STOP_X = 968;              // durakta tabelanın duracağı x (şoförün önünü kapatmasın)
   var BASE_V = 420, KMH = 42;    // px/sn ve km/sa çevirisi
   var SEG_TIME = 18;             // iki durak arası (sn, normal hızda)
   var VIS_MAX = 60, CROWD_VIS = 24;
@@ -94,6 +96,41 @@
   var strips = { far: null, mid: null };
   var stats = null, session = { carried: 0, routes: 0 };
   var summary = null;
+  var decorCarry = [];           // son durak/özet sırasında gelen süsler: yeni rotada takılır
+  var fClouds = [];              // uçuşta dolmuşun altından geçen bulutlar
+  var flyK = 0;                  // uçuş yüksekliği oranı (0..1)
+
+  // ---------------------------------------------------------------------------
+  // Kompakt bildirimler (takip/paylaşım): en fazla 2 satır, aynı tür birleşir
+  // ---------------------------------------------------------------------------
+  var toasts = [];
+  var TOAST_X = 52, TOAST_Y = 1190;
+  function toast(key, name, one, many, icon, color) {
+    for (var i = 0; i < toasts.length; i++) {
+      var o = toasts[i];
+      if (o.key === key && key && o.t < 3) {
+        o.n++; o.name = name; o.t = Math.min(o.t, 0.25); o.w = 0;
+        o.text = name + ' ve ' + (o.n - 1) + ' kişi daha ' + many;
+        return;
+      }
+    }
+    toasts.unshift({ key: key, name: name, n: 1, text: one ? name + ' ' + one : name, icon: icon, color: color, t: 0, life: 3.4 });
+    if (toasts.length > 2) toasts.length = 2;
+  }
+  function drawToasts(ctx) {
+    for (var i = 0; i < toasts.length; i++) {
+      var o = toasts[i];
+      var a = o.t < 0.25 ? o.t / 0.25 : o.t > o.life - 0.4 ? Math.max(0, (o.life - o.t) / 0.4) : 1;
+      var y = TOAST_Y - i * 60;
+      if (!o.w) { ctx.save(); ctx.font = ui.font(30, 800); o.w = Math.min(640, ctx.measureText(o.text).width + 88); ctx.restore(); }
+      ctx.save(); ctx.globalAlpha = a;
+      ui.panel(ctx, TOAST_X, y - 26, o.w, 52, { r: 26, fill: 'rgba(0,0,0,0.66)', border: false });
+      ui.emoji(ctx, o.icon, TOAST_X + 30, y, 30);
+      ui.text(ctx, o.text, TOAST_X + 54, y + 2, { size: 28, align: 'left', color: o.color, maxWidth: o.w - 70 });
+      ctx.restore();
+    }
+  }
+  LG.on('softcap', function (e) { if (e.user) toast('', e.user.name + ', efsanesin! Çok teşekkürler 💖', '', '', '👑', '#ffd166'); });
 
   function newStats() {
     return { carried: new Set(), longest: null, off: new Map(), relays: new Map(), maxAboard: 0, moments: [], korna: 0, klima: 0, music: 0 };
@@ -109,8 +146,9 @@
     BT.tx = bus.x + bus.dx; BT.ty = bus.y - bus.alt + bus.bounce;
     BT.px = -235 * bus.wheelieW; BT.py = 0;
     BT.rot = bus.pitch + bus.extraRot;
-    BT.sx = (1 + 0.07 * f + wob) * (1 + bus.sq);
-    BT.sy = (1 + 0.12 * f - wob) * (1 - bus.sq);
+    var fsc = 1 - 0.16 * flyK; // uçarken biraz küçülür: şehrin üstünde yükseliyor hissi
+    BT.sx = (1 + 0.08 * f + wob) * (1 + bus.sq) * fsc;
+    BT.sy = (1 + 0.14 * f - wob) * (1 - bus.sq) * fsc;
     BT.cos = Math.cos(BT.rot); BT.sin = Math.sin(BT.rot);
   }
   function applyBT(ctx) {
@@ -304,6 +342,7 @@
   function startDepart() {
     var fromStop = G.state === 'stopped' || G.state === 'final';
     G.state = 'depart'; G.st = 0; G.door = 0;
+    if (G.skipToEnd) G.brakeNow = true; // B: son durağa doğrudan
     if (fromStop) { G.signScroll0 = G.scroll; G.signX = STOP_X; }
     bus.pitchV -= 0.5; bus.lurchV -= 120;
     LG.sfx('whoosh');
@@ -403,12 +442,14 @@
     }
   }
   function speedKw(dir, u) {
+    G.gaugeFx = dir; G.gaugeT = 0.8;
     if (dir > 0) {
       G.kwBoost = Math.min(1.1, G.kwBoost + 0.3);
-      if (Math.random() < 0.4) ui.float('🚀 Bas gaza!', 330 + rand(-40, 40), 640, { color: '#ffd166', size: 36, life: 1.2 });
+      // egzozdan "gaz" bulutu
+      if (Math.random() < 0.5 && !fx.rocket) { toWorld(-372, -40, tmp); ui.float('💨 Gaz!', Math.max(110, tmp.x), tmp.y, { color: '#ffd166', size: 34, life: 1.1, vy: -90 }); }
     } else {
       G.kwBoost = Math.max(-0.65, G.kwBoost - 0.3);
-      if (Math.random() < 0.4) ui.float('🐢 Yavaş!', 330 + rand(-40, 40), 640, { color: '#a7f3d0', size: 36, life: 1.2 });
+      if (Math.random() < 0.5 && !fx.rocket) { toWorld(330, -40, tmp); ui.float('🐢 Yavaş!', Math.min(940, tmp.x), tmp.y, { color: '#a7f3d0', size: 34, life: 1.1, vy: -90 }); }
       if (Math.random() < 0.15) { var p = randomInside(); if (p) sayP(p, pick(D.SLOW), { life: 2 }); }
     }
   }
@@ -433,7 +474,9 @@
       if (c) {
         if (e.isNew) LG.sfx('join'); else LG.sfx('pop');
         if (k === 'inecek') say({ c: c }, pick(D.NOT_ON), { life: 2 });
-        else if (showText && bubbles.length < 4 && Math.random() < 0.5) say({ c: c }, showText, { name: u.name, color: u.color, life: 2.4 });
+        // ilk kez yazan herkes yorumunu adıyla görür (yer varsa); diğerleri yarı yarıya
+        else if (showText && bubbles.length < (e.isNew ? 5 : 4) && (e.isNew || Math.random() < 0.5)) say({ c: c }, showText, { name: u.name, color: u.color, life: 2.4 });
+        else if (e.isNew && bubbles.length < 3 && (G.state === 'stopped' || G.state === 'drive') && Math.random() < 0.35) sayDriver(pick(D.NEW_HI) + ' ' + shortText(u.name, 12) + '!', { life: 1.8 });
       }
     }
     if (k === 'klima') klima();
@@ -445,9 +488,11 @@
 
   LG.on('like', function (e) {
     G.likeHeat = Math.min(2.4, G.likeHeat + Math.min(60, e.count) * 0.006);
+    G.gaugeFx = 1; G.gaugeT = Math.max(G.gaugeT || 0, 0.35);
     if (LG.time - (G.lastHeart || 0) > 0.12) {
       G.lastHeart = LG.time;
-      ui.float('❤', 108 + rand(-26, 26), 300, { color: '#ff4d6d', size: 30, vy: -70, life: 0.9 });
+      // hız göstergesinin yanından (göstergeyi kapatmadan) yükselen kalpler
+      ui.float('❤', 196 + rand(-12, 12), 344, { color: '#ff4d6d', size: 30, vy: -80, life: 0.9 });
     }
   });
 
@@ -460,18 +505,19 @@
     else joinCrowd(u);
     var sub;
     if (eff === 1) sub = 'Parayı uzattı: "' + pick(D.PAY) + '" 💵';
-    else if (eff === 2) sub = 'Para üstü geldi! Teşekkürler 🪙';
-    else if (eff === 3) { var d = addDecor(u); sub = d ? 'Dolmuşu süsledi: ' + d.name + ' ' + d.emoji : 'Dolmuş pırıl pırıl parladı! ✨'; }
+    else if (eff === 2) sub = 'Para üstü geldi! Teşekkürler 💰';
+    else if (eff === 3) { var carry = G.state === 'summary' || G.state === 'final'; var d = addDecor(u); sub = d ? (carry ? 'Yeni sefere süs: ' : 'Dolmuşu süsledi: ') + d.name + ' ' + d.emoji : 'Dolmuş pırıl pırıl parladı! ✨'; }
     else if (eff === 4) { sub = 'TURBO! Dolmuş şaha kalkıyor 🔥'; queueBig({ type: 'turbo', u: u }); }
-    else if (eff === 5) { sub = 'Dolmuş kanatlandı, uçuyoruz! 🪽'; queueBig({ type: 'flight', u: u }); }
+    else if (eff === 5) { sub = 'Dolmuş kanatlandı, uçuyoruz! 🕊️'; queueBig({ type: 'flight', u: u }); }
     else { sub = 'AY SEFERİ! 🚀🌙 Efsanesin!'; queueBig({ type: 'rocket', u: u }); }
     queueBanner(u, g, eff, sub);
-    queuePass(u, eff, g.count);
+    // özet kartı açıkken dolmuş boş ve kartın arkasında: para uzatma animasyonu yok, teşekkür bandı yeter
+    if (G.state !== 'summary') queuePass(u, eff, g.count);
   });
 
   LG.on('follow', function (e) {
     if (!e.user) return;
-    ui.toast(e.user.name + ' abonman kart aldı', { icon: '💳', color: '#06d6a0' });
+    toast('follow', e.user.name, 'abonman kart aldı', 'abonman kart aldı', '💳', '#06d6a0');
     LG.sfx('heart');
     var p = byUser.get(e.user.id);
     if (p) sayP(p, 'Abonman kartım var! 💳', { life: 2.2 });
@@ -479,7 +525,7 @@
   });
   LG.on('share', function (e) {
     if (!e.user) return;
-    ui.toast(e.user.name + ' arkadaşını da çağırdı', { icon: '📣', color: '#4cc9f0' });
+    toast('share', e.user.name, 'arkadaşını da çağırdı', 'arkadaşlarını çağırdı', '📣', '#4cc9f0');
     LG.sfx('join');
     var p = byUser.get(e.user.id);
     if (p) sayP(p, 'Gelin gelin, yer var! 📣', { life: 2.2 });
@@ -581,8 +627,18 @@
     }
   }
   function addDecor(u) {
-    var next = null;
-    for (var i = 0; i < D.DECOR.length; i++) if (!decor[D.DECOR[i].id]) { next = D.DECOR[i]; break; }
+    var next = null, i;
+    // Son durakta / özet kartında süs takılırsa rota sıfırlanınca kaybolurdu: yeni rotaya taşı
+    if (G.state === 'summary' || G.state === 'final') {
+      var have = {};
+      for (i = 0; i < decorCarry.length; i++) have[decorCarry[i].id] = true;
+      for (i = 0; i < D.DECOR.length; i++) if (!have[D.DECOR[i].id]) { next = D.DECOR[i]; break; }
+      if (!next) return null;
+      decorCarry.push({ id: next.id, name: u.name, d: next });
+      LG.sfx('levelup');
+      return next;
+    }
+    for (i = 0; i < D.DECOR.length; i++) if (!decor[D.DECOR[i].id]) { next = D.DECOR[i]; break; }
     if (!next) { G.shineT = 1.4; LG.sfx('bell'); return null; }
     decor[next.id] = true; decorPop[next.id] = LG.time;
     LG.sfx('levelup');
@@ -599,9 +655,23 @@
     var k = (LG.time - t0) / 0.6;
     return k >= 1 ? 1 : Math.max(0.01, LG.ease.outBack(k));
   }
-  function queueBig(job) { bigQueue.push(job); if (bigQueue.length > 4) bigQueue.shift(); }
+  var BIG_RANK = { turbo: 1, flight: 2, rocket: 3 };
+  function queueBig(job) {
+    // büyük kademe önce (aynı kademede geliş sırası korunur)
+    var i = bigQueue.length;
+    while (i > 0 && BIG_RANK[bigQueue[i - 1].type] < BIG_RANK[job.type]) i--;
+    bigQueue.splice(i, 0, job);
+    if (bigQueue.length > 4) bigQueue.pop();
+  }
   function bigTick() {
-    if (fx.turbo || fx.flight || fx.rocket || !bigQueue.length) return;
+    if (!bigQueue.length) return;
+    var top = BIG_RANK[bigQueue[0].type];
+    // daha büyük bir hediye bekliyorsa süren küçük efekti kısa kes (hediye sahibini bekletme)
+    if (fx.turbo && top > 1) fx.turbo.t = Math.max(fx.turbo.t, fx.turbo.dur * 0.86);
+    if (fx.flight && top > 2) fx.flight.t = Math.max(fx.flight.t, fx.flight.dur * 0.86);
+    if (fx.turbo || fx.flight || fx.rocket) return;
+    // durakta bekliyorsak inen-binen bitince hemen kalk (efekt yolda oynar)
+    if (G.state === 'stopped' && G.phase === 'board' && G.st > 2.2) G.forceGo = true;
     if (G.state !== 'drive') return;
     var job = bigQueue.shift(), u = job.u;
     if (job.type === 'turbo') {
@@ -611,10 +681,10 @@
       moment(55, u.name + " TURBO'ya bastı, dolmuş şaha kalktı! 🔥");
     } else if (job.type === 'flight') {
       fx.flight = { t: 0, dur: 10, u: u };
-      bigText('DOLMUŞ UÇUYOR! 🪽', u.name + ' sayesinde', '#bde0fe', 3, 96);
-      LG.sfx('mega'); ui.flash('#ffffff', 0.4); ui.shake(14, 0.5);
+      bigText('DOLMUŞ UÇUYOR! 🕊️', u.name + ' sayesinde', '#bde0fe', 3, 96, 1150);
+      LG.sfx('mega'); ui.flash('#fff6d0', 0.25); ui.shake(14, 0.5);
       LG.music.play('race');
-      moment(90, u.name + ' sayesinde dolmuş kanatlanıp uçtu! 🪽');
+      moment(90, u.name + ' sayesinde dolmuş kanatlanıp uçtu! 🕊️');
     } else {
       fx.rocket = { t: 0, u: u, stage: 0 };
       LG.music.play('tension');
@@ -625,8 +695,8 @@
   // ---------------------------------------------------------------------------
   // Büyük yazılar
   // ---------------------------------------------------------------------------
-  function bigText(text, sub, color, life, size) {
-    bigTexts.push({ text: text, sub: sub || '', color: color || '#ffd400', t: 0, life: life || 2, size: size || 100 });
+  function bigText(text, sub, color, life, size, y) {
+    bigTexts.push({ text: text, sub: sub || '', color: color || '#ffd400', t: 0, life: life || 2, size: size || 100, y: y || 0 });
     if (bigTexts.length > 3) bigTexts.shift();
   }
 
@@ -669,7 +739,8 @@
         G.v += (BASE_V * G.speedMul - G.v) * Math.min(1, dt * 2.2);
         G.seg += dt * (0.7 + 0.3 * Math.min(G.speedMul, 2.5));
         G.signX = STOP_X - (G.scroll - G.signScroll0);
-        if ((G.seg >= SEG_TIME || G.brakeNow) && !fx.flight && !fx.rocket && !fx.turbo && bus.alt < 2) { G.brakeNow = false; startBrake(); }
+        // büyük hediye efekti sıradaysa önce o oynasın, sonra durağa yanaş
+        if ((G.brakeNow || (G.seg >= SEG_TIME && !bigQueue.length)) && !fx.flight && !fx.rocket && !fx.turbo && bus.alt < 2) { G.brakeNow = false; startBrake(); }
         break;
       case 'brake':
         var bk = Math.min(1, G.st / G.brakeT);
@@ -837,6 +908,12 @@
 
     // tamponda/çatıda olanlar için kalabalık ölçüsü
     if (aboard.length > stats.maxAboard) stats.maxAboard = aboard.length;
+    // tıka basa dolu: ara sıra bir vida fırlar
+    if (bus.f > 0.85 && Math.random() < dt * 0.6) {
+      toWorld(rand(-360, 360), rand(-260, -40), tmp);
+      ui.burst(tmp.x, tmp.y, { count: 4, shape: 'circle', colors: ['#9aa0a6', '#cfd4da'], speed: 380, size: 9, life: 0.8 });
+      LG.sfx('tick');
+    }
   }
 
   function stopUpdate(dt) {
@@ -856,10 +933,7 @@
       if ((crowd.length === 0 && hoppers.length === 0 && G.pt > 1.0 && G.st > 3.6) || G.st > 11 || G.forceGo) { G.phase = 'close'; G.pt = 0; G.forceGo = false; }
     } else if (G.phase === 'close') {
       G.door = Math.max(0, G.door - dt / 0.4);
-      if (G.door <= 0) {
-        if (G.skipToEnd && G.state === 'stopped') { startDepart(); G.brakeNow = true; }
-        else startDepart();
-      }
+      if (G.door <= 0) startDepart();
     } else if (G.phase === 'done') {
       for (var i = 0; i < aboard.length; i++) removePassenger(aboard[i--]);
       if (G.pt > 2.2) startSummary();
@@ -891,6 +965,10 @@
   // ---------------------------------------------------------------------------
   function updateFx(dt, t) {
     bus.pitchTarget = 0; bus.wheelieW += (0 - bus.wheelieW) * Math.min(1, dt * 4);
+    if (!fx.flight) flyK += (0 - flyK) * Math.min(1, dt * 3);
+    // uçuşta dolmuşun altından akan bulutlar
+    if (fx.flight && fClouds.length < 7 && Math.random() < dt * 2.4) fClouds.push({ x: W + 170, y: rand(905, 1085), s: rand(0.9, 1.7) });
+    for (var fc = fClouds.length - 1; fc >= 0; fc--) { fClouds[fc].x -= (G.v * 1.5 + 280) * dt; if (fClouds[fc].x < -330) fClouds.splice(fc, 1); }
     bus.extraRot *= Math.max(0, 1 - dt * 4);
     var altTarget = 0;
     if (fx.turbo) {
@@ -909,9 +987,10 @@
       var F = fx.flight; F.t += dt;
       var fk = F.t / F.dur;
       var up = fk < 0.15 ? LG.ease.inOutSine(fk / 0.15) : fk > 0.85 ? LG.ease.inOutSine((1 - fk) / 0.15) : 1;
-      altTarget = 165 * up + Math.sin(F.t * 2.2) * 12 * up;
+      flyK = up;
+      altTarget = 250 * up + Math.sin(F.t * 2.2) * 16 * up;
       bus.extraRot = -0.06 * up + Math.sin(F.t * 1.7) * 0.03 * up;
-      if (Math.random() < dt * 5) { toWorld(rand(-300, 200), -300, tmp); ui.burst(tmp.x, tmp.y, { count: 1, shape: 'emoji', emoji: '🪶', speed: 120, gravity: 120, size: 14, life: 1.8 }); }
+      if (Math.random() < dt * 5) { toWorld(rand(-300, 200), -300, tmp); ui.burst(tmp.x, tmp.y, { count: 1, shape: 'emoji', emoji: LG.pick(['✨', '⭐', '💫']), speed: 120, gravity: 120, size: 14, life: 1.8 }); }
       if (F.t >= F.dur) {
         fx.flight = null; bus.sqV += 2.4; bus.bounceV += 200; ui.shake(12, 0.4); LG.sfx('boom');
         if (G.musicT > 0) LG.music.play('halay'); else LG.music.play('chill');
@@ -922,7 +1001,7 @@
       var rt = R.t;
       if (rt < 2.6) { // geri sayım
         var cd = Math.floor(rt / 0.85);
-        if (cd !== R.stage - 1 && cd < 3) { R.stage = cd + 1; bigText(String(3 - cd), 'Aya dolmuş seferi! 🚀', '#ff4d6d', 0.8, 160); LG.sfx('countdown'); }
+        if (cd !== R.stage - 1 && cd < 3) { R.stage = cd + 1; bigText(String(3 - cd), 'Ay’a dolmuş seferi! 🚀', '#ff4d6d', 0.8, 160); LG.sfx('countdown'); }
         ui.shake(3 + rt * 2, 0.1);
         bus.dx = Math.sin(rt * 60) * 2;
       } else if (rt < 4.0) { // kalkış
@@ -1270,6 +1349,14 @@
 
   function drawCrowdAndWalkers(ctx, t) {
     var running = G.state === 'drive' || G.state === 'depart' || G.state === 'ebrake' || G.state === 'pause';
+    if (!crowd.length && G.state !== 'summary' && G.state !== 'final') {
+      // boş kaldırım: davet
+      var pa = 0.75 + Math.sin(t * 3) * 0.2;
+      ctx.save(); ctx.globalAlpha = pa;
+      ui.panel(ctx, 640, 1132, 380, 54, { r: 27, fill: 'rgba(0,0,0,0.45)', border: 'rgba(255,255,255,0.6)', lineWidth: 3 });
+      ui.text(ctx, '💬 Yorum yaz, sen de bin!', 830, 1160, { size: 30, maxWidth: 356, color: '#fff' });
+      ctx.restore();
+    }
     var vis0 = Math.max(0, crowd.length - CROWD_VIS);
     var list = [];
     for (var i = vis0; i < crowd.length; i++) list.push(crowd[i]);
@@ -1498,10 +1585,10 @@
       }
     }
     var saveBT = { tx: BT.tx, ty: BT.ty, px: BT.px, py: BT.py, rot: BT.rot, sx: BT.sx, sy: BT.sy, cos: BT.cos, sin: BT.sin };
-    BT.tx = bx; BT.ty = by; BT.px = 0; BT.py = 0; BT.rot = rot; BT.sx = sc * (1 + 0.07 * bus.f); BT.sy = sc * (1 + 0.12 * bus.f); BT.cos = Math.cos(rot); BT.sin = Math.sin(rot);
+    BT.tx = bx; BT.ty = by; BT.px = 0; BT.py = 0; BT.rot = rot; BT.sx = sc * (1 + 0.08 * bus.f); BT.sy = sc * (1 + 0.14 * bus.f); BT.cos = Math.cos(rot); BT.sin = Math.sin(rot);
     drawBus(ctx, t, true);
     for (var key in saveBT) BT[key] = saveBT[key];
-    ui.text(ctx, 'AYA DOLMUŞ SEFERİ!', W / 2, 1090, { size: 74, color: '#ffd400' });
+    ui.text(ctx, 'AY’A DOLMUŞ SEFERİ!', W / 2, 1090, { size: 74, color: '#ffd400' });
     ui.text(ctx, R.u.name + ' sayesinde 🚀', W / 2, 1160, { size: 44, color: '#fff', maxWidth: 900 });
     if (k > 3.6) {
       var bb = R.bub || (R.bub = (function () { var o = { text: "Ay'da inecek var!", w: 0, h: 0 }; A.measureBubble(ctx, o); return o; })());
@@ -1616,7 +1703,7 @@
       var k = b.t / b.life;
       var sc = b.t < 0.35 ? LG.ease.outBack(b.t / 0.35) : 1;
       var a = k > 0.8 ? (1 - k) / 0.2 : 1;
-      var y = 600 + i * 10;
+      var y = b.y || 600 + i * 10;
       ctx.save(); ctx.globalAlpha = a; ctx.translate(540, y); ctx.scale(sc, sc); ctx.rotate(Math.sin(t * 5) * 0.02);
       ui.text(ctx, b.text, 0, 0, { size: b.size, color: b.color, strokeColor: '#1a0f00', strokeWidth: b.size * 0.16, maxWidth: 980 });
       if (b.sub) ui.text(ctx, b.sub, 0, b.size * 0.75, { size: b.size * 0.4, color: '#fff', maxWidth: 900 });
@@ -1643,7 +1730,7 @@
     ui.text(ctx, '🏁 SON DURAK! 🏁', 540, y + 52, { size: 64, color: '#1d1300', stroke: false });
     ui.text(ctx, s.route, 540, y + 150, { size: 32, color: '#ffd166', maxWidth: 900 });
     var rows = [];
-    rows.push({ icon: '🧍', text: 'Taşınan yolcu: ' + LG.fmt(s.carried) + (s.total > s.carried ? '  (bugün ' + LG.fmt(s.total) + ')' : '') });
+    rows.push({ icon: '👥', text: 'Taşınan yolcu: ' + LG.fmt(s.carried) + (s.total > s.carried ? '  (bugün ' + LG.fmt(s.total) + ')' : '') });
     if (s.longest) rows.push({ icon: '🛣️', u: s.longest.u, text: 'En uzun yolculuk: ' + s.longest.u.name + ' (' + s.longest.n + ' durak)' });
     if (s.off) rows.push({ icon: '🛑', u: s.off.u, text: 'En çok "inecek var" diyen: ' + s.off.u.name + ' (' + s.off.n + ')' });
     if (s.relay) rows.push({ icon: '🤝', u: s.relay.u, text: 'En yardımsever: ' + s.relay.u.name + ' (' + s.relay.n + ' kez para uzattı)' });

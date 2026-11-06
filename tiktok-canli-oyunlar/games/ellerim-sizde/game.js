@@ -4,16 +4,24 @@
  * ─── OBS KURULUMU (ÖNEMLİ) ────────────────────────────────────────────────────────────────
  *  Bu sayfa bir ÜST KATMANDIR (overlay). Sayfa şeffaftır ve ortadaki büyük yuvarlak
  *  "KAMERA PENCERESİ" (x 60..1020, y 444..1084 — 1080x1920 tuvalde) her karede tamamen
- *  şeffaf bırakılır (ctx destination-out ile delinir). Pencerenin çevresine dekor + arayüz çizilir.
+ *  şeffaf bırakılır (her karede tuval temizlenir, dekor sadece pencerenin ÇEVRESİNE çizilir;
+ *  pencere hiç boyanmaz). Pencerenin çevresine dekor + arayüz çizilir.
  *    1) OBS'te önce eller kameranı (Video Yakalama Aygıtı) ekle.
  *    2) Bu sayfayı "Tarayıcı Kaynağı" olarak 1080x1920 ekle ve kaynak listesinde kameranın
  *       ÜSTÜNE taşı (yani kamera bu sayfanın ALTINDA kalsın).
  *    3) Kamerayı pencereye denk gelecek şekilde büyüt/kırp. Oylama ve jüri sırasında pencere
  *       kısalır; kameranın alt kısmı oy kartlarının arkasında kalır, bu normaldir.
+ *  OBS YOKSA (ör. TikTok LIVE Studio + pencere yakalama):
+ *    ?kamera=1  sayfa eller kamerasını KENDİSİ açıp pencereye çizer (tarayıcı izin ister). Birden çok
+ *               kamera varsa adından bir parça yaz: ?kamera=logitech  ·  ?ayna=1 görüntüyü aynalar.
+ *    ?krom=1    pencere düz yeşil (#00ff00) boyanır → yayın programında "renk anahtarı (chroma key)"
+ *               filtresiyle yeşili sil, kamerayı alta koy.
  *  URL parametreleri:
  *    ?bg=1      pencerenin içine örnek masa + iki çizgi film eli çizer (tanıtım / ekran görüntüsü).
  *               ?demo=1 veya ?sim=1 açıkken de otomatik çizilir. Canlı yayında KULLANMA.
  *    ?dolgu=0   pencerenin dışı da şeffaf olur (sadece paneller çizilir; tam ekran kamera için).
+ *    ?malzemesiz=1  sadece malzeme gerektirmeyen görevler (eller, kağıt, kalem).
+ *  Hediye afişleri pencerenin ALTINDAKİ satırların üstüne çıkar; görev sırasında eller hiç kapanmaz.
  * ───────────────────────────────────────────────────────────────────────────────────────────
  *
  * Akış: OYLAMA (20 sn — 1 / 2 / 3 yaz) → SEÇİLDİ (hazırlan, 3·2·1) → GÖREV (30–120 sn; her yorum
@@ -54,7 +62,8 @@
   var BAR_Y = 1096, INFO_Y = 1156, HINT_Y = 1214;
   var ROW_H = 110, ROW_GAP = 8;
 
-  var DUR = { vote: 20, reveal: 4.6, jury: 15, result: 6.5 };
+  var DUR = { vote: 20, reveal: 6, jury: 15, result: 6.5 };
+  var BANNER_CY = 1190, BANNER_H = 196;          // hediye afişi: pencerenin ALTINDAKİ satırların üstüne (kamera açık kalır)
   var OPT_COL = ['#3a86ff', '#ff9f1c', '#ff006e'];
   var OPT_DARK = ['#1d4fb8', '#b5650a', '#a3004a'];
   var DIFF = [null, { t: 'Kolay', c: '#06a77d' }, { t: 'Orta', c: '#e07a00' }, { t: 'Zor', c: '#e5174f' }];
@@ -96,7 +105,7 @@
   var followers = [];
   var legends = [];
   var recentTitles = [];
-  var bubbles = [], bubbleQ = [], bubbleCD = 0, bubbleSide = 0, chatters = [];
+  var bubbles = [], bubbleQ = [], bubbleSide = 0;
   var banners = [], banner = null;
   var fireworksT = 0, fwCD = 0;
   var tlane = [];
@@ -106,6 +115,9 @@
   var infoItems = [], infoSlot = -999, infoT = 0, followFocus = 0;
   var sparkles = [];
   var lastTen = false;
+  var pops = [];                                   // büyük "pat" yazıları (BAŞLA!, SÜPER DESTEK…)
+  var laneLast = [null, null];                     // baloncuk şeritleri (sol / sağ) — üst üste binmesin
+  var activity = [];                               // oylamada son yorum yazanlar (oy + sohbet)
 
   // ---------------------------------------------------------------------------
   // Yardımcılar
@@ -235,6 +247,97 @@
   }
   ui.toast = toast;
 
+  // Büyük "pat" yazısı: hızlıca büyüyerek gelir, TAM opak bekler, sonda söner (ui.float baştan
+  // solmaya başladığı için kamera üstünde soluk/gri görünüyordu).
+  function pop(text, x, y, o) {
+    o = o || {};
+    if (o.key) for (var i = pops.length - 1; i >= 0; i--) if (pops[i].key === o.key) pops.splice(i, 1);
+    var size = o.size || 64;
+    // aynı yerde başka bir yazı varsa altına diz (ör. jüri başında "BAŞARDI MI?" + "SÜPER DESTEK")
+    for (var tries = 0; tries < 3; tries++) {
+      var hit = null;
+      for (var j = 0; j < pops.length; j++) {
+        var q = pops[j], qy = q.y + q.vy * q.t;
+        if (q.t < q.life * 0.8 && Math.abs(qy - y) < (q.size + size) * 0.6) { hit = q; break; }
+      }
+      if (!hit) break;
+      y = hit.y + hit.vy * hit.t + (hit.size + size) * 0.7;
+    }
+    pops.push({ text: text, x: x, y: y, size: size, color: o.color || '#ffe14d', dark: o.dark || '#3b0a5e', t: 0, life: o.life || 1.6, vy: o.vy != null ? o.vy : -24, key: o.key || '' });
+    if (pops.length > 4) pops.shift();
+  }
+  function updatePops(dt) { for (var i = pops.length - 1; i >= 0; i--) { pops[i].t += dt; if (pops[i].t >= pops[i].life) pops.splice(i, 1); } }
+  function drawPops(ctx) {
+    for (var i = 0; i < pops.length; i++) {
+      var p = pops[i], k = p.t / p.life;
+      var sc = p.t < 0.28 ? 0.35 + 0.65 * LG.ease.outBack(p.t / 0.28) : 1 + (p.t - 0.28) * 0.03;
+      var a = k > 0.75 ? (1 - k) / 0.25 : 1;
+      ctx.save();
+      ctx.globalAlpha *= clamp01(a);
+      ctx.translate(p.x, p.y + p.vy * p.t); ctx.scale(sc, sc);
+      ctext(ctx, p.text, 5, 8, { size: p.size, weight: 900, color: 'rgba(30,0,50,0.5)', stroke: false });
+      ctext(ctx, p.text, 0, 0, { size: p.size, weight: 900, color: p.color, strokeColor: p.dark, strokeWidth: Math.round(p.size * 0.2) });
+      ctx.restore();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Kamera seçenekleri (OBS dışı kurulumlar için)
+  //   ?kamera=1        kamerayı tarayıcı açar ve pencereye kendisi çizer (TikTok LIVE Studio'da
+  //                    "pencere yakalama" ile tek kaynak). ?kamera=logitech → adında "logitech" geçen kamera.
+  //   ?ayna=1          kamera görüntüsünü yatay aynala
+  //   ?krom=1          pencereyi düz yeşil (#00ff00) boyar → yayın programında "renk anahtarı" ile kamerayı alta koy
+  //   ?malzemesiz=1    sadece malzemesiz görevler (eller, kağıt, kalem)
+  // ---------------------------------------------------------------------------
+  var CAM_PARAM = new URLSearchParams(location.search).get('kamera');
+  var CAM_ON = CAM_PARAM !== null && ['0', 'false', 'hayir', 'hayır'].indexOf(CAM_PARAM) < 0;
+  var MIRROR = LG.qb('ayna', false);
+  var KROM = LG.qb('krom', false);
+  var cam = { video: null, ready: false, failed: false };
+  function startCamera() {
+    var md = navigator.mediaDevices;
+    if (!md || !md.getUserMedia) { cam.failed = true; toast('Kamera açılamadı — tarayıcı izin vermiyor', { icon: '📷', color: '#ff8fa3', life: 8 }); return; }
+    var want = CAM_PARAM && ['', '1', 'true', 'evet'].indexOf(CAM_PARAM) < 0 ? LG.cmd.norm(CAM_PARAM) : '';
+    var size = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    function open(extra) { return md.getUserMedia({ video: Object.assign({}, size, extra || {}), audio: false }); }
+    open().then(function (stream) {
+      if (!want || !md.enumerateDevices) return stream;
+      return md.enumerateDevices().then(function (devs) {
+        var d = devs.filter(function (x) { return x.kind === 'videoinput' && LG.cmd.norm(x.label).indexOf(want) >= 0; })[0];
+        if (!d) return stream;
+        stream.getTracks().forEach(function (tr) { tr.stop(); });
+        return open({ deviceId: { exact: d.deviceId } });
+      });
+    }).then(function (stream) {
+      var v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.autoplay = true; v.srcObject = stream;
+      v.onloadedmetadata = function () { try { v.play(); } catch (err) { /* yok say */ } cam.ready = true; };
+      cam.video = v;
+    }).catch(function (err) {
+      cam.failed = true;
+      toast('Kamera açılamadı (' + ((err && err.name) || 'hata') + ')', { icon: '📷', color: '#ff8fa3', life: 8 });
+    });
+  }
+  function drawCamera(ctx) {
+    var v = cam.video, vw = v.videoWidth, vh = v.videoHeight;
+    if (!vw || !vh) return false;
+    // kamera her zaman TAM pencereye oturur (OBS'teki gibi); pencere kısalınca alt kısmı kartların arkasında kalır
+    var s = Math.max(WW / vw, WH_FULL / vh), dw = vw * s, dh = vh * s;
+    ctx.save();
+    ui.roundRect(ctx, win.x, win.y, win.w, win.h, WR); ctx.clip();
+    ctx.fillStyle = '#000'; ctx.fillRect(win.x, win.y, win.w, win.h);
+    if (MIRROR) { ctx.translate(WX + WW / 2, 0); ctx.scale(-1, 1); ctx.translate(-(WX + WW / 2), 0); }
+    ctx.drawImage(v, WX + (WW - dw) / 2, WY + (WH_FULL - dh) / 2, dw, dh);
+    ctx.restore();
+    return true;
+  }
+  var TASKS = DATA.TASKS;
+  if (LG.qb('malzemesiz', false)) {
+    var NOPROPS = /^(sadece eller( \+ ışık)?|kağıt|kalem|kağıt \+ kalem|kağıt \+ kurşun kalem)$/;
+    var few = DATA.TASKS.filter(function (t) { return NOPROPS.test(t.p); });
+    if (few.length >= 12) TASKS = few;
+  }
+
   // ---------------------------------------------------------------------------
   // Skor (aynı gün içinde sayfa yenilense de korunur; demo/sim'de kaydedilmez)
   // ---------------------------------------------------------------------------
@@ -250,8 +353,8 @@
   // Görev seçimi
   // ---------------------------------------------------------------------------
   function pickOptions() {
-    var pool = DATA.TASKS.filter(function (t) { return recentTitles.indexOf(t.t) < 0; });
-    if (pool.length < 6) { recentTitles = []; pool = DATA.TASKS.slice(); }
+    var pool = TASKS.filter(function (t) { return recentTitles.indexOf(t.t) < 0; });
+    if (pool.length < 6) { recentTitles = []; pool = TASKS.slice(); }
     LG.shuffle(pool);
     var out = [], want = LG.shuffle([1, 2, 3]);
     function ok(t) { for (var k = 0; k < out.length; k++) if (out[k] === t || out[k].e === t.e) return false; return true; }
@@ -260,12 +363,13 @@
     }
     for (var m = 0; out.length < 3 && m < pool.length; m++) if (ok(pool[m])) out.push(pool[m]);
     out.forEach(function (t) { recentTitles.push(t.t); });
-    if (recentTitles.length > 45) recentTitles.splice(0, recentTitles.length - 45);
+    var keep = Math.min(45, Math.max(6, TASKS.length - 9));
+    if (recentTitles.length > keep) recentTitles.splice(0, recentTitles.length - keep);
     return out;
   }
   function pickBonusTask() {
-    var pool = DATA.TASKS.filter(function (t) { return t.d <= 2 && t.s <= 60 && recentTitles.indexOf(t.t) < 0; });
-    if (!pool.length) pool = DATA.TASKS;
+    var pool = TASKS.filter(function (t) { return t.d <= 2 && t.s <= 60 && recentTitles.indexOf(t.t) < 0; });
+    if (!pool.length) pool = TASKS;
     var t = LG.pick(pool);
     recentTitles.push(t.t);
     return t;
@@ -284,6 +388,12 @@
   function resetVotes() {
     S.votes.clear(); S.counts = [0, 0, 0]; S.bump = [0, 0, 0];
     S.recent = [[], [], []]; S.lastVoter = [null, null, null]; S.lastVoters = [];
+    activity = []; S.part = new Set();
+  }
+  function noteActivity(u) {
+    var k = activity.indexOf(u); if (k >= 0) activity.splice(k, 1);
+    activity.push(u); if (activity.length > 12) activity.shift();
+    if (S.part) S.part.add(u.id);
   }
   function resetEnergy() {
     supporters.clear(); topSup = [];
@@ -348,7 +458,7 @@
     LG.sfx('go');
     LG.music.play('party');
     LG.music.setTempo(1);
-    ui.float('BAŞLA!', W / 2, WY + WH_FULL * 0.5, { size: 130, color: '#ffd166', life: 1.3, vy: -70 });
+    pop('BAŞLA!', W / 2, WY + WH_FULL * 0.45, { size: 150, color: '#ffe14d', life: 1.25, vy: -30 });
     ui.burst(W / 2, WY + WH_FULL * 0.5, { count: 70, speed: 900 });
     ui.shake(8, 0.25);
   }
@@ -359,7 +469,7 @@
     setPhase('jury', DUR.jury);
     LG.music.play('tension');
     LG.sfx('bell');
-    ui.float('⚖️ BAŞARDI MI?', W / 2, WY + 230, { size: 74, color: '#ffd166', life: 1.6, vy: -40 });
+    pop('⚖️ BAŞARDI MI?', W / 2, WY + 190, { size: 80, color: '#ffe14d', life: 1.7, vy: -20 });
   }
   function juryVerdict() {
     var e = S.jc.e, h = S.jc.h;
@@ -439,6 +549,13 @@
     var f = words[0].replace(/[^a-z0-9]/g, '');
     if (YES.indexOf(f) >= 0) return 'e';
     if (NO.indexOf(f) >= 0) return 'h';
+    // "bence evet", "kesin başardı", "maalesef olmadı" — uzun kelimeler cümle içinde de sayılır
+    for (var i = 1; i < words.length; i++) {
+      var w = words[i].replace(/[^a-z0-9]/g, '');
+      if (w.length < 3) continue;
+      if (YES.indexOf(w) >= 0) return 'e';
+      if (NO.indexOf(w) >= 0) return 'h';
+    }
     return null;
   }
   function castVote(u, i) {
@@ -469,7 +586,7 @@
     LG.sfx(j === 'e' ? 'correct' : 'wrong', { gap: 140 });
   }
   function isCheer(e) {
-    if (/[👏💪🔥❤💖🙌✨⭐🥳]/.test(e.raw)) return true;
+    if (/[👏💪🔥❤💖🙌✨⭐🥳]/u.test(e.raw)) return true;
     var words = e.norm.split(' ');
     for (var i = 0; i < words.length; i++) if (DATA.CHEER_WORDS.indexOf(words[i]) >= 0) return true;
     return false;
@@ -482,7 +599,7 @@
       s.pts += pts;
     }
     if (energy.v >= energy.target) {
-      if (LG.time - energy.lastUp > 2.2) levelUp();
+      if (LG.time - energy.lastUp > 4) levelUp();
       else energy.v = energy.target;
 
     }
@@ -495,7 +612,7 @@
     energy.flash = 1;
     LG.sfx('levelup');
     var txt = '💪 SÜPER DESTEK x' + (energy.level + 1) + '!';
-    ui.float(txt, W / 2, win.y + Math.min(170, win.h * 0.45), { size: 62, color: '#ffd166', life: 1.8, vy: -50 });
+    pop(txt, W / 2, win.y + Math.min(150, win.h * 0.42), { size: 60, color: '#ffe14d', life: 1.5, vy: -30, key: 'lvl' });
     for (var i = 0; i < 6; i++) ui.burst(WX + 80 + i * 160, BAR_Y + 26, { count: 12, speed: 500, up: 400 });
     if (S.phase === 'task') LG.music.setTempo(Math.min(1.3, 1 + energy.level * 0.05));
   }
@@ -513,10 +630,11 @@
     bubbleQ.push({ u: u, text: text, cheer: cheer });
     if (bubbleQ.length > 8) bubbleQ.shift();
   }
-  function makeBubble(q) {
+  var BUB_SP = 125, BUB_H = 76;                     // sabit hız → aynı şeritteki baloncuklar birbirine yetişmez
+  function makeBubble(q, side) {
     var text = clip(q.text, 20);
     var tw = measure(text, 26), nw = measure(q.u.name, 22);
-    var w = Math.ceil(Math.max(tw, nw) + 96), h = 76;
+    var w = Math.ceil(Math.max(tw, nw) + 96), h = BUB_H;
     var c = mk(w, h), g = c.getContext('2d');
     ui.roundRect(g, 3, 3, w - 6, h - 6, 34);
     g.fillStyle = q.cheer ? '#fff7d6' : 'rgba(255,255,255,0.96)'; g.fill();
@@ -526,24 +644,25 @@
     g.fillText(q.u.name, 76, 25);
     g.font = ui.font(26, 800); g.fillStyle = '#2a1650';
     g.fillText(text, 76, 53);
-    var side = (bubbleSide++) % 2;
-    return {
-      u: q.u, c: c, w: w, h: h, side: side, t: 0,
-      life: 3.2, sp: LG.rand(70, 105), ph: Math.random() * TAU,
-      dx: LG.rand(0, 40), y0: 0,
-    };
+    return { u: q.u, c: c, w: w, h: h, side: side, t: 0, life: 3, sp: BUB_SP, ph: Math.random() * TAU, dx: LG.rand(0, 36), y0: 0, top: 0 };
+  }
+  function laneFree(side) {
+    var b = laneLast[side];
+    return !b || bubbles.indexOf(b) < 0 || b.t * b.sp >= b.h + 10;
   }
   function updateBubbles(dt) {
-    bubbleCD -= dt;
-    var cap = bubbles.length < 10;
     if (S.phase === 'vote') bubbleQ.length = 0;
-    if (bubbleCD <= 0 && bubbleQ.length && cap && win.h > 380) {
-      var b = makeBubble(bubbleQ.shift());
-      b.y0 = win.y + win.h - 50;
-      b.top = win.y + 200;
-      b.life = LG.clamp((b.y0 - b.top) / b.sp, 1.6, 3.6);
-      bubbles.push(b);
-      bubbleCD = bubbleQ.length > 4 ? 0.16 : 0.28;
+    if (bubbleQ.length && win.h > 380 && bubbles.length < 12) {
+      var side = laneFree(bubbleSide) ? bubbleSide : laneFree(1 - bubbleSide) ? 1 - bubbleSide : -1;
+      if (side >= 0) {
+        var b = makeBubble(bubbleQ.shift(), side);
+        b.y0 = win.y + win.h - 50;
+        b.top = win.y + (win.h > 560 ? 250 : 175);       // üstte bildirimlere/çıkartmalara değmesin
+        b.life = LG.clamp((b.y0 - b.top) / b.sp, 1.2, 4);
+        bubbles.push(b);
+        laneLast[side] = b;
+        bubbleSide = 1 - side;
+      }
     }
     for (var i = bubbles.length - 1; i >= 0; i--) {
       bubbles[i].t += dt;
@@ -554,12 +673,12 @@
     for (var i = 0; i < bubbles.length; i++) {
       var b = bubbles[i];
       var p = b.t / b.life;
-      var a = p < 0.1 ? p / 0.1 : p > 0.8 ? (1 - p) / 0.2 : 1;
+      var a = p < 0.08 ? p / 0.08 : p > 0.8 ? (1 - p) / 0.2 : 1;
       var sc = b.t < 0.25 ? LG.ease.outBack(b.t / 0.25) : 1;
       var y = b.y0 - b.t * b.sp;
+      if (y > win.y + win.h - 30) continue;              // pencere kısaldıysa (jüri) kartların üstüne taşma
       var x = b.side === 0 ? win.x - 14 + b.dx : win.x + win.w + 14 - b.w - b.dx;
       x += Math.sin(b.t * 2.2 + b.ph) * 7;
-      if (y < win.y + 150) continue;
       ctx.save();
       ctx.globalAlpha = Math.max(0, a);
       ctx.translate(x + b.w / 2, y);
@@ -585,10 +704,8 @@
     }
     var cheer = isCheer(e);
     addEnergy(handled ? 1 : cheer ? 4 : 2, u, cheer ? 3 : 1);
-    if (!handled && !e.flagged && e.text) {
-      if (S.phase === 'vote') { var ci = chatters.indexOf(u); if (ci >= 0) chatters.splice(ci, 1); chatters.push(u); if (chatters.length > 10) chatters.shift(); }
-      else queueBubble(u, e.text, cheer);
-    }
+    if (S.phase === 'vote') noteActivity(u);           // oy veren de sohbet eden de alt satırda anında görünür
+    else if (!handled && !e.flagged && e.text) queueBubble(u, e.text, cheer);
     if (e.isNew && !handled && LG.time - lastWelcome > 4) {
       lastWelcome = LG.time;
       LG.sfx('join');
@@ -641,7 +758,8 @@
     var target = S.phase === 'task' || S.phase === 'reveal' ? S.twists : pendingTwists;
     var used = target.map(function (x) { return x.tw.t; });
     var free = DATA.TWISTS.filter(function (x) { return used.indexOf(x.t) < 0; });
-    if (target.length >= 3 || !free.length) { thanks(u, gname); applause(2); LG.sfx('coin'); return; }
+    var mine = target.some(function (x) { return x.by === u; });   // seri hediyede herkes 1 çıkartma
+    if (mine || target.length >= 3 || !free.length) { thanks(u, gname); applause(2); LG.sfx('coin'); return; }
     var tw = LG.pick(free);
     target.push({ tw: tw, by: u, born: LG.time, w: measure(tw.t, 30, 900) + 74, rot: LG.rand(-0.09, 0.09) });
     var later2 = target === pendingTwists && S.phase !== 'vote';
@@ -660,7 +778,7 @@
     } else if (canExtra) {
       if (S.phase === 'task') {
         S.dur += 30; S.extraAdded += 30;
-        ui.float('+30 SN', RING.x - 40, RING.y + 70, { size: 54, color: '#7dffcf', life: 1.6, vy: -40 });
+        pop('+30 SN', RING.x - 90, win.y + 70, { size: 56, color: '#7dffcf', dark: '#04573f', life: 1.6, vy: 10, key: 't30' });
       } else if (S.phase === 'reveal') S.extraAdded += 30;
       else pendingExtra += 30;
       toast('+30 SANİYE' + (cur ? '' : ' (sıradaki görev)') + ' · ' + u.name + ' — teşekkürler!', { icon: '⏱️', color: '#7dffcf', life: 4 });
@@ -717,7 +835,7 @@
     if (S.phase === 'result') return;
     if (S.phase === 'reveal') S.extraAdded += 30;          // geri sayım uzamaz, görev süresi uzar
     else { S.dur += 30; if (S.phase === 'task') S.extraAdded += 30; }
-    ui.float('+30 SN', RING.x - 40, RING.y + 70, { size: 54, color: '#7dffcf', life: 1.6, vy: -40 });
+    pop('+30 SN', RING.x - 90, win.y + 70, { size: 56, color: '#7dffcf', dark: '#04573f', life: 1.6, vy: 10, key: 't30' });
     LG.sfx('coin');
   });
   LG.onKey('x', 'Zorlaştırma çıkartmalarını kaldır', function () {
@@ -950,8 +1068,10 @@
     var ly2 = win.y + win.h - 58;
     ctx.globalAlpha = 0.92;
     ui.panel(ctx, cx - 330, ly2 - 40, 660, 80, { r: 40, fill: 'rgba(20,10,40,0.62)', border: 'rgba(255,255,255,0.35)', lineWidth: 3 });
-    ctext(ctx, '📷 Kamera buraya', cx, ly2 - 14, { size: 32, color: '#fff' });
-    ctext(ctx, '(OBS\'te bu sayfanın ALTINA kamerayı koy)', cx, ly2 + 20, { size: 22, color: '#ffd166', strokeWidth: 3 });
+    var camL1 = !CAM_ON ? '📷 Kamera buraya' : cam.failed ? '📷 Kamera açılamadı' : '📷 Kamera açılıyor…';
+    var camL2 = !CAM_ON ? '(OBS\'te bu sayfanın ALTINA kamerayı koy)' : cam.failed ? '(izin ver ve sayfayı yenile ya da OBS kurulumunu kullan)' : '(tarayıcı sorarsa kameraya izin ver)';
+    ctext(ctx, camL1, cx, ly2 - 14, { size: 32, color: '#fff' });
+    ctext(ctx, camL2, cx, ly2 + 20, { size: 22, color: '#ffd166', strokeWidth: 3, maxWidth: 620 });
     ctx.restore();
   }
 
@@ -1034,9 +1154,10 @@
     }
   }
 
+  function pendingOrCurTwists() { return S.phase === 'vote' ? pendingTwists : S.twists; }
   function drawStickers(ctx, t) {
     // zorlaştırma çıkartmaları: pencerenin üst kenarına, sağdan sola
-    var list = S.phase === 'task' || S.phase === 'reveal' || S.phase === 'jury' || S.phase === 'result' ? S.twists : pendingTwists;
+    var list = pendingOrCurTwists();
     var xr = win.x + win.w - 64;
     var total = 0;
     for (var q = 0; q < list.length; q++) total += list[q].w + 14;
@@ -1044,7 +1165,7 @@
     for (var i = 0; i < list.length; i++) {
       var s = list[i];
       var w = s.w, h = 70;
-      var x = xr - w * k / 2, y = win.y + 4;
+      var x = xr - w * k / 2, y = win.y + 40;           // pencerenin içinde: başlık paneli üstünü kesmesin
       xr -= (w + 14) * k;
       var age = LG.time - s.born;
       if (age < 0) continue;
@@ -1093,10 +1214,11 @@
     var tw = measure(tabTxt, 24, 900) + 36;
     ui.panel(ctx, HEAD.x + 22, HEAD.y - 18, tw, 36, { r: 18, fill: tabCol, border: '#fff', lineWidth: 3 });
     ctext(ctx, tabTxt, HEAD.x + 22 + tw / 2, HEAD.y + 1, { size: 24, weight: 900, color: '#fff', strokeWidth: 4 });
-    // Görev Sponsoru sekmesi (görev kartının sağ üst kenarı)
-    var spU = S.phase === 'vote' ? null : S.sponsor;
+    // Görev Sponsoru sekmesi (görev kartının sağ üst kenarı). Oylamada sıradaki sponsor gösterilir;
+    // talimat satırı ("1 · 2 · 3 yaz") hiç değişmez.
+    var spU = S.phase === 'vote' ? sponsorQ[0] : S.sponsor;
     if (spU) {
-      var spTxt = '🎗️ Görev Sponsoru: ' + spU.name;
+      var spTxt = (S.phase === 'vote' ? '🎗️ Sıradaki sponsor: ' : '🎗️ Görev Sponsoru: ') + spU.name;
       var spW = Math.min(560, measure(spTxt, 24, 900) + 40);
       var spX = RING.x - RING.r - 18 - spW;
       var glow = 0.5 + 0.5 * Math.sin(t * 4);
@@ -1114,8 +1236,7 @@
     var maxW = RING.x - RING.r - 24 - mx;
     if (S.phase === 'vote') {
       ctext(ctx, 'Hangi görevi yapayım?', mx, my, { size: 46, align: 'left', color: '#fff', maxWidth: maxW });
-      var sub = sponsorQ.length ? '🎗️ Sıradaki görevin sponsoru: ' + sponsorQ[0].name : '1 · 2 · 3 yaz — en çok oy alanı yaparım!';
-      ctext(ctx, sub, mx, sy, { size: 28, align: 'left', color: '#ffd166', maxWidth: maxW, strokeWidth: 5 });
+      ctext(ctx, '1 · 2 · 3 yaz — en çok oy alanı yaparım!', mx, sy, { size: 28, align: 'left', color: '#ffd166', maxWidth: maxW, strokeWidth: 5 });
     } else if (S.phase === 'reveal' || S.phase === 'task') {
       var task = S.task;
       ui.emoji(ctx, task.e, mx + 36, HEAD.y + 58, 66);
@@ -1270,8 +1391,9 @@
       if (lv && LG.time - lv.t < 2.2) {
         var age = LG.time - lv.t, pa = age > 1.8 ? (2.2 - age) / 0.4 : 1;
         var nt = ui.nameTag(lv.u, 20, '#fff', 'rgba(0,0,0,0.45)');
+        var room = bw - 200 - 34 - Math.max(1, rec.length) * 22 - 14, nk = Math.min(1, room / nt.width);
         ctx.globalAlpha *= pa;
-        ctx.drawImage(nt, Math.round(s.x + 200), Math.round(y + 14 + bh * 0.62 + 18 - nt.height / 2));
+        ctx.drawImage(nt, Math.round(s.x + 200), Math.round(y + 14 + bh * 0.62 + 18 - nt.height * nk / 2), nt.width * nk, nt.height * nk);
       }
       ctx.restore();
     }
@@ -1394,23 +1516,24 @@
     }
   }
 
+  // Hediye afişi pencerenin ALTINDAKİ satırların (destek / bilgi / ipucu) üstüne çıkar: kameradaki
+  // eller, oy kartları ve jüri paneli hiç kapanmaz. Efsane'de altın ışınlar pencereye alttan vurur.
   function drawBanner(ctx, t) {
     var b = banner; if (!b) return;
     var inA = clamp01(b.t / 0.3), outA = clamp01((b.dur - b.t) / 0.4);
     var sc = LG.ease.outBack(clamp01(b.t / 0.45));
-    var cx = W / 2, cy = win.y + Math.min(win.h * 0.5, 300);
-    var bw = 920, bh = 232;
+    var cx = W / 2, cy = BANNER_CY;
+    var bw = 960, bh = BANNER_H;
     ctx.save();
     ctx.globalAlpha = Math.min(inA, outA);
     if (b.legend) {
-      // dönen altın ışınlar (ucuz: ince üçgenler) — sadece kamera penceresinde
       ctx.save();
       ui.roundRect(ctx, win.x, win.y, win.w, win.h, WR); ctx.clip();
-      ctx.translate(cx, cy); ctx.rotate(t * 0.6);
-      ctx.fillStyle = 'rgba(255,215,0,0.22)';
+      ctx.translate(cx, cy); ctx.rotate(t * 0.5);
+      ctx.fillStyle = 'rgba(255,215,0,0.2)';
       for (var ri = 0; ri < 12; ri++) {
         ctx.rotate(TAU / 12);
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(560, -46); ctx.lineTo(560, 46); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(900, -70); ctx.lineTo(900, 70); ctx.closePath(); ctx.fill();
       }
       ctx.restore();
     }
@@ -1418,15 +1541,22 @@
     var gg = ctx.createLinearGradient(-bw / 2, 0, bw / 2, 0);
     if (b.legend) { gg.addColorStop(0, '#3b0a5e'); gg.addColorStop(0.5, '#7a2a9e'); gg.addColorStop(1, '#3b0a5e'); }
     else { gg.addColorStop(0, '#ff006e'); gg.addColorStop(1, '#8338ec'); }
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ui.roundRect(ctx, -bw / 2 + 8, -bh / 2 + 12, bw, bh, 40); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ui.roundRect(ctx, -bw / 2 + 8, -bh / 2 + 10, bw, bh, 40); ctx.fill();
     ctx.fillStyle = gg; ui.roundRect(ctx, -bw / 2, -bh / 2, bw, bh, 40); ctx.fill();
     ctx.lineWidth = 8; ctx.strokeStyle = b.legend ? '#ffd166' : '#fff'; ctx.stroke();
-    ui.avatar(ctx, b.u, -bw / 2 + 112, 0, 80, { ring: '#ffd166', ringWidth: 7 });
+    // parıltı süpürmesi
+    ctx.save(); ui.roundRect(ctx, -bw / 2, -bh / 2, bw, bh, 40); ctx.clip();
+    var sx = -bw / 2 - 200 + ((b.t * 900) % (bw + 400));
+    var sg = ctx.createLinearGradient(sx - 90, 0, sx + 90, 0);
+    sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.22)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sg; ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+    ctx.restore();
+    ui.avatar(ctx, b.u, -bw / 2 + 100, 0, 70, { ring: '#ffd166', ringWidth: 7 });
     var title = b.legend ? '👑 EFSANE DESTEKÇİ!' : '👏 ALKIŞ YAĞMURU!';
-    ctext(ctx, title, -bw / 2 + 220, -62, { size: 50, weight: 900, align: 'left', color: '#ffe14d', maxWidth: bw - 380, strokeColor: '#2a0040', strokeWidth: 8 });
-    ctext(ctx, b.u.name, -bw / 2 + 220, 2, { size: 46, align: 'left', color: '#fff', maxWidth: bw - 380 });
-    ctext(ctx, '🎗️ Sıradaki görevin sponsoru · Teşekkürler! 💖', -bw / 2 + 220, 62, { size: 27, align: 'left', color: '#ffd8f0', maxWidth: bw - 330, strokeWidth: 5 });
-    ui.emoji(ctx, b.emoji, bw / 2 - 86, Math.sin(t * 6) * 8, 104);
+    ctext(ctx, title, -bw / 2 + 196, -52, { size: 48, weight: 900, align: 'left', color: '#ffe14d', maxWidth: bw - 360, strokeColor: '#2a0040', strokeWidth: 8 });
+    ctext(ctx, b.u.name, -bw / 2 + 196, 6, { size: 44, align: 'left', color: '#fff', maxWidth: bw - 360 });
+    ctext(ctx, '🎗️ Sıradaki görevin sponsoru · Teşekkürler! 💖', -bw / 2 + 196, 58, { size: 27, align: 'left', color: '#ffd8f0', maxWidth: bw - 300, strokeWidth: 5 });
+    ui.emoji(ctx, b.emoji, bw / 2 - 82, Math.sin(t * 6) * 8, 100);
     ctx.restore();
   }
 
@@ -1464,8 +1594,7 @@
 
   function buildInfoItems() {
     var items = [];
-    if (S.phase === 'vote' && S.lastVoters.length) items.push({ label: '🗳️ Son oylar:', users: S.lastVoters.slice().reverse(), more: S.votes.size });
-    if (S.phase === 'vote' && chatters.length) items.push({ label: '💬 Sohbette:', users: chatters.slice().reverse() });
+    if (S.phase === 'vote' && activity.length) items.push({ id: 'act', label: '💬 Son yorumlar:', users: activity.slice().reverse(), more: S.part ? S.part.size : activity.length });
     if (S.phase !== 'vote' && S.choosers.length) items.push({ label: '🗳️ Görevi seçenler:', users: S.choosers.slice(-10).reverse(), more: S.choosers.length });
     if (S.phase !== 'vote' && S.bonusBy) items.push({ label: '⭐ Bonus görev:', users: [S.bonusBy] });
     if (topSup.length) items.push({ label: '💪 En çok destek:', users: topSup });
@@ -1478,12 +1607,14 @@
   function drawInfo(ctx, t) {
     var x = WX, y = INFO_Y, w = WW, h = 48;
     var slot = Math.max(0, Math.floor(LG.time / 4.5));
-    if (slot !== infoSlot || LG.time - infoT > 1 || !infoItems.length) {
+    if (slot !== infoSlot || LG.time - infoT > 0.3 || !infoItems.length) {
       if (slot !== infoSlot) infoSlot = slot;
       infoT = LG.time;
       infoItems = buildInfoItems();
     }
     var it = infoItems[slot % infoItems.length];
+    // oylamada "Son yorumlar" ana satırdır: her 2 dilimden 1'i (isim 1 sn içinde görünsün)
+    if (infoItems[0].id === 'act' && infoItems.length > 1) it = slot % 2 === 0 ? infoItems[0] : infoItems[1 + ((slot >> 1) % (infoItems.length - 1))];
     var ph = (Math.max(0, LG.time) % 4.5) / 4.5;
     var a = ph < 0.06 ? ph / 0.06 : ph > 0.94 ? (1 - ph) / 0.06 : 1;
     if (LG.time < followFocus) {
@@ -1513,7 +1644,7 @@
   }
 
   function drawToasts(ctx) {
-    var x = win.x + 34, y0 = win.y + 82;
+    var x = win.x + 34, y0 = win.y + (pendingOrCurTwists().length ? 112 : 66);
     var maxN = win.h < 360 ? 2 : 3;
     for (var i = 0; i < tlane.length && i < maxN; i++) {
       var to = tlane[i];
@@ -1545,7 +1676,7 @@
     if (sec !== lastTick && sec <= tickFrom && sec > 0) { LG.sfx(sec <= 3 ? 'countdown' : 'tick'); lastTick = sec; }
     if (S.phase === 'task' && left <= 10 && !lastTen && S.dur > 15) {
       lastTen = true;
-      ui.float('⏰ SON 10 SANİYE!', W / 2, win.y + 120, { size: 60, color: '#ff8fa3', life: 1.6, vy: -40 });
+      pop('⏰ SON 10 SANİYE!', W / 2, win.y + 150, { size: 66, color: '#ffffff', dark: '#b0003a', life: 1.7, vy: -16 });
     }
     if (S.phase === 'reveal') {
       var intro = DUR.reveal - 3;
@@ -1577,16 +1708,17 @@
       // hedef, sohbetin hızına uyar (kalabalık dağılınca bar takılı kalmasın)
       energy.target = Math.max(Math.round(energy.v + 5), Math.round(LG.lerp(energy.target, desiredTarget(), 0.25)));
     }
-    if (energy.v >= energy.target && LG.time - energy.lastUp > 2.2) levelUp();
+    if (energy.v >= energy.target && LG.time - energy.lastUp > 4) levelUp();
     topSupT -= dt;
     if (topSupT <= 0) { topSupT = 0.6; topSup = computeTopSupporters(4); }
 
     updateBubbles(dt);
+    updatePops(dt);
     for (var j = tlane.length - 1; j >= 0; j--) { tlane[j].t += dt; if (tlane[j].t > tlane[j].life) tlane.splice(j, 1); }
 
     // hediye afişleri
     // büyük anlarla çakışmasın: "seçildi" kartı ve sonuç damgası sırasında afiş bekler
-    var busy = S.phase === 'reveal' || (S.phase === 'result' && S.t < 2.6);
+    var busy = (S.phase === 'reveal' && S.t < 1.5) || (S.phase === 'result' && S.t < 2.6);
     if (!banner && banners.length && !busy) { banner = banners.shift(); banner.t = 0; startBanner(banner); }
     if (banner) { banner.t += dt; if (banner.t >= banner.dur) banner = null; }
     // havai fişek çerçeve
@@ -1639,8 +1771,13 @@
         ctx.restore();
       }
     }
-    // KAMERA PENCERESİ: hiç boyanmadı → şeffaf. (Örnek görüntü sadece ?bg=1 / demo / sim)
-    if (SHOW_BG) drawPlaceholder(ctx, t);
+    // KAMERA PENCERESİ: hiç boyanmadı → şeffaf. (?kamera=1 → tarayıcının kendi kamerası,
+    // ?krom=1 → düz yeşil, örnek masa + eller sadece ?bg=1 / demo / sim)
+    var camDrawn = CAM_ON && cam.ready && drawCamera(ctx);
+    if (!camDrawn) {
+      if (KROM) { ctx.save(); ui.roundRect(ctx, win.x, win.y, win.w, win.h, WR); ctx.fillStyle = '#00ff00'; ctx.fill(); ctx.restore(); }
+      else if (SHOW_BG || CAM_ON) drawPlaceholder(ctx, t);
+    }
     drawFrame(ctx, t);
     ctx.save();
     ui.applyShake(ctx);
@@ -1657,13 +1794,14 @@
 
     if (S.phase === 'reveal') drawReveal(ctx, t);
     if (S.phase === 'result') drawResult(ctx, t);
-    drawBanner(ctx, t);
 
     drawTitle(ctx, t);
     drawHeader(ctx, t);
     drawEnergy(ctx, t);
     drawInfo(ctx, t);
     hintBar(ctx);
+    drawBanner(ctx, t);
+    drawPops(ctx);
     ctx.restore();
   }
 
@@ -1677,6 +1815,7 @@
       buildBackground();
       buildTable();
       buildHand();
+      if (CAM_ON) startCamera();
       startVote();
     },
     update: update,

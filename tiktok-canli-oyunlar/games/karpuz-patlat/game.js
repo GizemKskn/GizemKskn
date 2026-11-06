@@ -10,7 +10,12 @@
  *     temizlik ve sıradaki meyve (karpuz → kavun → balkabağı → dev balon → ananas → …)
  *
  * Sunucu tuşları: N yeni meyve / yeni tur · B şimdi patlat (final) · T gerilim (sarsıntı + çatırtı)
- * URL ayarları: ?minlastik=40&maxlastik=900 (gizli patlama eşiği sınırları)
+ * URL ayarları: ?minlastik=40&maxlastik=900 (gizli patlama eşiği sınırları) · ?mintur=40 (en kısa tur, sn)
+ *
+ * Gizli eşik: son 150 sn'deki yorum/beğeni hızına göre tur ~2–4 dk sürecek şekilde seçilir; tur içinde (6., 15. ve 40. sn)
+ * yayın beklenenden kalabalıksa sessizce yükseltilir (gösterge geri düşmez). Eşik erken aşılırsa meyve "dayanır"
+ * ve en erken ?mintur saniyede patlar — böylece büyük bir hediye turu tek başına bitiremez. 3,5 dk'dan sonra lastik yorulur.
+ * Gösterge (GERİLİM) eşiği ele vermez: her turda rastgele bir tavanla (%85–96) ölçeklenir.
  */
 (function () {
   'use strict';
@@ -32,7 +37,8 @@
   var MAX_LABELS = 15;      // aynı anda en fazla isim etiketi
   var CHAT_CD = 1.2;        // aynı kişinin yorumla lastik takma aralığı (sn)
   var LIKES_PER_BAND = 15;
-  var MIN_PLAY = max(5, LG.qn('mintur', 40)); // bir meyve en erken bu kadar saniyede patlar (gerilim doruğa yakın bekler)
+  var MIN_PLAY = max(5, LG.qn('mintur', 40));
+  var RETARGET_AT = [6, 15, 40]; // tur içi gizli eşik kontrolleri (sn) // bir meyve en erken bu kadar saniyede patlar (gerilim doruğa yakın bekler)
   var TH_MIN = max(10, LG.qn('minlastik', 40));
   var TH_MAX = max(TH_MIN + 10, LG.qn('maxlastik', 900));
 
@@ -55,7 +61,7 @@
     guesses: new Map(), guessOpen: true,
     board: new LG.Board(),
     recent: [], tease: 0, crackBoost: 0, waist: 0, creakT: 2, res: null, landed: false,
-    p0: 0, u0: 0, freeRound: 0, retargets: 0, hold: false, holdEnd: 0,
+    p0: 0, u0: 0, freeRound: 0, retargets: 0, hold: false, holdEnd: 0, burstAdds: 0,
   };
   var fruit = { x: 540, rot: 0, sq: 0, sqV: 0, press: 0, ox: 0, oy: 0, visible: true };
   var G = A.G;
@@ -72,7 +78,7 @@
   var tmpP = { x: 0, y: 0 };
   // Yerleşmiş lastikler bir ara katmana çizilir (en çok ~7 Hz); esneme/titreme bu katmana dönüşüm olarak uygulanır
   KP.tune = { cacheInt: 0.14 };
-  var BC = { front: null, back: null, t: -9, pv: -1, dirty: true, ok: false, x0: 0, y0: 0, live: [] };
+  var BC = { img: null, t: -9, pv: -1, tz: 0, cb: 0, dirty: true, ok: false, x0: 0, y0: 0, live: [] };
   var GREF = { F: null, cx: 540, cy: 0, RX: 0, RY: 0, hw: new Float32Array(A.N + 1), pinch: new Float32Array(A.N + 1), spin: 0 };
   var MEDALS = ['🥇', '🥈', '🥉'];
   var FW_PALS = [['#ff4d6d', '#ffd166', '#fff'], ['#4cc9f0', '#b388ff', '#fff'], ['#06d6a0', '#ffd166', '#fff'], ['#ff9f1c', '#ff4d6d', '#ffe066']];
@@ -90,7 +96,7 @@
   // Yayın kalabalıksa (yorumlar beklenenden hızlı geliyorsa) tur 2–4 dk sürsün diye eşiği gizlice yükselt
   function retarget() {
     var el = now() - S.playStart;
-    if (el < 8 || S.hold) return;
+    if (el < 5 || S.hold || progress() > 0.9) return;
     var rate = S.freeRound / el;
     var want = rate * max(60, LG.rand(100, 160) - el * 0.5);
     var remain = S.threshold - S.units;
@@ -169,14 +175,16 @@
     S.unitsBump = 1;
     if (o.free) { freeLog.push(now()); S.freeRound++; }
     if (u) { S.board.add(u, b.units); pushRecent(u); S.lastUser = u; }
-    fruit.sqV = min(4, fruit.sqV + (o.impulse != null ? o.impulse : 0.45 + b.lw * 0.045));
+    // art arda gelen lastiklerde itki azalır (meyve yassılaşıp kalmasın)
+    fruit.sqV = min(2.4, fruit.sqV + (o.impulse != null ? o.impulse : 0.45 + b.lw * 0.045) / (1 + S.burstAdds * 0.6));
+    S.burstAdds += 1;
     if (b.kind === 'thick') { LG.sfx('boing'); LG.sfx('drum'); ui.shake(10, 0.3); }
     else if (o.thin) LG.sfx('tick');
     else if (o.isNew) LG.sfx('join');
     else if (b.sparkle) LG.sfx('coin');
     else LG.sfx('pop');
     if (o.hype) {
-      fruit.sqV = min(4, fruit.sqV + 0.8);
+      fruit.sqV = min(2.4, fruit.sqV + 0.8);
       if (canFloat(0.25)) { A.knotPos(G, b, b.k, tmpP); ui.float('', tmpP.x, tmpP.y - 10, { emoji: '💥', size: 40, life: 0.9, vy: -160 }); }
     }
     labelT = 0;
@@ -359,14 +367,15 @@
     if (S.st !== 'play') return;
     S.tease = min(1, S.tease + 0.6);
     S.crackBoost = min(0.35, S.crackBoost + 0.1);
-    fruit.sqV = min(4, fruit.sqV + 2.6);
+    BC.dirty = true;
+    fruit.sqV = min(3, fruit.sqV + 2.6);
     ui.shake(14, 0.45);
     LG.sfx('clap'); LG.sfx('zap');
     ui.float(T.tease, G.cx, G.cy - G.RY * 0.25, { size: 70, color: '#ffe14d', life: 1.4, vy: -90 });
     if (S.F.burst === 'juice') { spawnSeeds(5); for (var i = 0; i < 3; i++) spawnDrip(); }
   }
   function spawnDrip() {
-    if (drips.length > 30 || !cracks.length) return;
+    if (drips.length > 16 || !cracks.length) return;
     var c = LG.pick(cracks);
     var rev = clamp((S.pv + S.crackBoost - c.start) / 0.3, 0, 1);
     var phi, v;
@@ -513,6 +522,7 @@
     heat *= exp(-dt * 1.3);
     S.tease = max(0, S.tease - dt * 1.4);
     S.unitsBump = max(0, S.unitsBump - dt * 4);
+    S.burstAdds *= exp(-dt * 5);
     S.t += dt;
 
     // --- durum makinesi
@@ -536,7 +546,7 @@
         } else S.relAcc = 0;
         if (S.st !== 'play') break;
         var el = t - S.playStart;
-        if ((S.retargets === 0 && el > 15) || (S.retargets === 1 && el > 40)) { S.retargets++; retarget(); }
+        if (S.retargets < RETARGET_AT.length && el > RETARGET_AT[S.retargets]) { S.retargets++; retarget(); }
         if (S.hold && t >= S.holdEnd) { startCritical(S.lastUser); break; }
         if (el > 210 && S.threshold > S.units + 1) S.threshold = max(S.units + 1, S.threshold - dt * 0.35); // lastik yorgunluğu
         if (S.guessOpen && S.pv >= 0.5) { S.guessOpen = false; note('🎯', T.guessesClosed, '#7dffb0'); LG.sfx('bell'); }
@@ -546,7 +556,7 @@
           if (S.pv > 0.55) { LG.sfx(S.pv > 0.8 ? 'clap' : 'tick'); if (S.pv > 0.7) fruit.sqV += 0.9; }
         }
         if (S.F.burst === 'juice') {
-          if (S.pv > 0.42 && Math.random() < dt * (S.pv - 0.42) * 9) spawnDrip();
+          if (S.pv > 0.42 && Math.random() < dt * (S.pv - 0.42) * 5.5) spawnDrip();
           if (S.pv > 0.62 && Math.random() < dt * (S.pv - 0.6) * 2.5) spawnSeeds(1);
         }
         if (S.pv > 0.72 && LG.music.style !== 'tension' && LG.config.music) LG.music.play('tension');
@@ -596,7 +606,7 @@
     var dts = dt * ts;
     if (S.st !== 'freeze') {
       fruit.sqV += (-170 * fruit.sq - 9 * fruit.sqV) * dt;
-      fruit.sq = clamp(fruit.sq + fruit.sqV * dt, -0.22, 0.25);
+      fruit.sq = clamp(fruit.sq + fruit.sqV * dt, -0.14, 0.16);
     }
     for (i = 0; i < S.bands.length; i++) { var bb = S.bands[i]; if (bb.snap > 0) bb.snap = max(0, bb.snap - dt * 3.3); }
     var amp = min(7, heat * 0.05) + pow(S.pv, 3) * 4 + S.tease * 12 + (S.st === 'critical' ? 6 + S.t * 16 : 0);
@@ -623,7 +633,7 @@
 
     // --- geometri
     if (fruit.visible) {
-      var crit = S.st === 'critical' ? 0.05 * sin(t * 38) + S.t * 0.06 : S.st === 'freeze' ? 0.09 : 0;
+      var crit = critBulge();
       A.computeGeom(G, S.F, {
         x: fruit.x + fruit.ox, base: A.BASE_Y + fruit.oy, pv: S.pv, sq: fruit.sq, press: fruit.press,
         bands: S.bands, waist: S.waist, extraBulge: crit, extraWaist: crit * 0.6,
@@ -754,26 +764,31 @@
   // ---------------------------------------------------------------------------
   // Lastik katmanı önbelleği
   // ---------------------------------------------------------------------------
-  function cacheUsable() { return S.st === 'play' && S.bands.length > 14; }
-  function refreshBandCache(t) {
+  // Meyvenin tamamı (gövde, desen, çatlaklar, yerleşmiş lastikler) referans biçimde bir ara katmana çizilir;
+  // esneme/pres/titreme bu katmana afin dönüşüm olarak uygulanır. En yeni lastikler, parıltı ve damlalar canlı çizilir.
+  function cacheUsable() { return S.st === 'play' || S.st === 'critical' || S.st === 'freeze'; }
+  function crackTease() { return S.crackBoost + S.tease * 0.15 + (S.st === 'critical' ? S.t * 0.5 : S.st === 'freeze' ? 0.5 : 0); }
+  function critBulge() { return S.st === 'critical' ? min(0.07, S.t * 0.07) : S.st === 'freeze' ? 0.08 : 0; }
+  function refreshFruitCache(t) {
     var tn = now(), i, b;
-    if (tn - BC.t < (S.queue.length > 15 ? KP.tune.cacheInt * 1.8 : KP.tune.cacheInt)) return;
-    var need = BC.dirty || abs(S.pv - BC.pv) > 0.004 || tn - BC.t > 1;
+    var busy = S.queue.length > 15 || S.st === 'critical';
+    if (BC.ok && tn - BC.t < (busy ? KP.tune.cacheInt * 1.6 : KP.tune.cacheInt)) return;
+    var tz = crackTease(), cb = critBulge();
+    var need = !BC.ok || BC.dirty || abs(S.pv - BC.pv) > 0.004 || abs(tz - BC.tz) > 0.01 || abs(cb - BC.cb) > 0.004 || tn - BC.t > 1.2;
     for (i = 0; !need && i < S.bands.length; i++) { b = S.bands[i]; if (!b.cached && b.snap === 0 && tn - b.born > 0.35) need = true; }
     if (!need) return;
-    A.computeGeom(GREF, S.F, { x: 540, base: A.BASE_Y, pv: S.pv, sq: 0, press: 0, bands: S.bands, waist: S.waist });
+    A.computeGeom(GREF, S.F, { x: 540, base: A.BASE_Y, pv: S.pv, sq: 0, press: 0, bands: S.bands, waist: S.waist, extraBulge: cb, extraWaist: cb * 0.6 });
     var settled = [];
     for (i = 0; i < S.bands.length; i++) { b = S.bands[i]; b.cached = b.snap === 0 && tn - b.born > 0.35; if (b.cached) settled.push(b); }
-    var w = Math.ceil(GREF.RX * 2.4 + 60), h = Math.ceil(GREF.RY * 1.3 + 160);
-    if (!BC.front || BC.front.width < w || BC.front.height < h) { BC.front = A.mk(w, h); BC.back = A.mk(w, h); }
-    BC.x0 = 540 - BC.front.width / 2; BC.y0 = GREF.cy - BC.front.height / 2;
-    var fc = BC.front.getContext('2d'), bc = BC.back.getContext('2d');
-    fc.setTransform(1, 0, 0, 1, 0, 0); fc.clearRect(0, 0, BC.front.width, BC.front.height);
-    bc.setTransform(1, 0, 0, 1, 0, 0); bc.clearRect(0, 0, BC.back.width, BC.back.height);
-    fc.setTransform(1, 0, 0, 1, -BC.x0, -BC.y0); bc.setTransform(1, 0, 0, 1, -BC.x0, -BC.y0);
+    var w = Math.ceil(GREF.RX * 2.5 + 80), h = Math.ceil(GREF.RY * 2.3 + 200);
+    if (!BC.img || BC.img.width < w || BC.img.height < h) BC.img = A.mk(max(w, BC.img ? BC.img.width : 0), max(h, BC.img ? BC.img.height : 0));
+    BC.x0 = 540 - BC.img.width / 2; BC.y0 = A.BASE_Y + 46 - BC.img.height;
+    var fc = BC.img.getContext('2d');
+    fc.setTransform(1, 0, 0, 1, 0, 0); fc.clearRect(0, 0, BC.img.width, BC.img.height);
+    fc.setTransform(1, 0, 0, 1, -BC.x0, -BC.y0);
+    A.drawFruitBody(fc, GREF, { bands: settled, cracks: cracks, pv: S.pv, tease: tz, drips: null, t: t, glow: 0 });
     A.drawBandsFront(fc, GREF, settled, t, max(0, settled.length - 24), true);
-    A.drawBandsBack(bc, GREF, settled);
-    BC.t = tn; BC.pv = S.pv; BC.dirty = false; BC.ok = true;
+    BC.t = tn; BC.pv = S.pv; BC.tz = tz; BC.cb = cb; BC.dirty = false; BC.ok = true;
   }
   // Önbellek görüntüsünü güncel meyve biçimine eşle (taban noktası etrafında ölçek + titreme kayması)
   function drawCacheImg(ctx, img) {
@@ -783,9 +798,16 @@
     ctx.drawImage(img, BC.x0, BC.y0);
     ctx.restore();
   }
-  function backFn(ctx) {
-    drawCacheImg(ctx, BC.back);
-    A.drawBandsBack(ctx, G, BC.live);
+  // Kritik an kenar kızarması: bir kez çizilir
+  var vignette = null;
+  function getVignette() {
+    if (vignette) return vignette;
+    vignette = A.mk(540, 960);
+    var x = vignette.getContext('2d');
+    var vg = x.createRadialGradient(270, 410, 150, 270, 410, 540);
+    vg.addColorStop(0, 'rgba(255,0,40,0)'); vg.addColorStop(1, 'rgba(255,0,40,1)');
+    x.fillStyle = vg; x.fillRect(0, 0, 540, 960);
+    return vignette;
   }
 
   // ---------------------------------------------------------------------------
@@ -809,7 +831,6 @@
     var gr = x.createLinearGradient(0, -46, 0, 46);
     gr.addColorStop(0, '#ff8a98'); gr.addColorStop(0.5, '#ff2d55'); gr.addColorStop(1, '#c8102e');
     x.fillStyle = gr; x.fillText(txt, x0, 0);
-    x.fillStyle = 'rgba(255,255,255,0.35)'; x.fillRect(x0, -30, tw, 0); // (yer tutucu)
     x.font = '100px ' + ui.EMOJI_FONT; x.fillText(em, x0 + tw + 18, 6);
     x.restore();
     return c;
@@ -1021,19 +1042,21 @@
       ctx.save();
       if (fruit.rot) { ctx.translate(G.cx, G.cy); ctx.rotate(fruit.rot); ctx.translate(-G.cx, -G.cy); }
       var glow = S.st === 'critical' ? 0.55 + 0.45 * sin(t * 30) : max(0, S.pv - 0.8) * 2.5 * (0.5 + 0.5 * sin(t * 8));
-      var useC = cacheUsable();
-      if (useC) {
-        refreshBandCache(t);
+      if (cacheUsable()) {
+        refreshFruitCache(t);
         BC.live.length = 0;
         for (i = 0; i < S.bands.length; i++) if (!S.bands[i].cached) BC.live.push(S.bands[i]);
-      } else { BC.ok = false; for (i = 0; i < S.bands.length; i++) S.bands[i].cached = false; }
-      useC = useC && BC.ok;
-      A.drawFruitBody(ctx, G, { bands: S.bands, backFn: useC ? backFn : null, cracks: cracks, pv: S.pv, tease: S.crackBoost + S.tease * 0.15 + (S.st === 'critical' ? S.t * 0.5 : 0), drips: drips, t: t, glow: glow });
-      if (useC) {
-        drawCacheImg(ctx, BC.front);
-        A.drawBandsFront(ctx, G, BC.live, t, 0);
+        drawCacheImg(ctx, BC.img);
+        if (glow > 0.01) { A.outline(ctx, G); ctx.fillStyle = 'rgba(255,40,40,' + (glow * 0.22).toFixed(3) + ')'; ctx.fill(); }
+        A.drawDrips(ctx, G, drips, F.juice);
+        if (BC.live.length) { A.drawBandsBack(ctx, G, BC.live); A.drawBandsFront(ctx, G, BC.live, t, 0); }
         A.drawSparkles(ctx, G, S.bands, t, 24);
-      } else A.drawBandsFront(ctx, G, S.bands, t, max(0, S.bands.length - 30));
+      } else {
+        BC.ok = false;
+        for (i = 0; i < S.bands.length; i++) S.bands[i].cached = false;
+        A.drawFruitBody(ctx, G, { bands: S.bands, cracks: cracks, pv: S.pv, tease: crackTease(), drips: drips, t: t, glow: glow });
+        A.drawBandsFront(ctx, G, S.bands, t, max(0, S.bands.length - 30));
+      }
       ctx.restore();
     }
     // düşen damlalar
@@ -1106,7 +1129,7 @@
       ctx.restore();
     }
     if (banner) drawBanner(ctx, banner, t);
-    drawNote(ctx);
+    if (S.st !== 'result' && S.st !== 'sweep') drawNote(ctx);
     ui.hintBar(ctx, 170, L.hintY, 740, T.hints, { h: L.hintH, size: 36 });
   }
 
@@ -1119,15 +1142,11 @@
     ctx.restore();
     // kritik an: kırmızı kenar
     var vgA = S.st === 'critical' ? 0.5 + 0.2 * sin(t * 26) : S.st === 'play' && S.pv > 0.85 ? 0.16 * (0.5 + 0.5 * sin(t * 6)) : 0;
-    if (vgA > 0) {
-      var vg = ctx.createRadialGradient(540, 820, 320, 540, 820, 1050);
-      vg.addColorStop(0, 'rgba(255,0,40,0)'); vg.addColorStop(1, 'rgba(255,0,40,' + vgA.toFixed(3) + ')');
-      ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
-    }
+    if (vgA > 0) { ctx.globalAlpha = vgA; ctx.drawImage(getVignette(), 0, 0, W, H); ctx.globalAlpha = 1; }
     drawHUD(ctx, t);
     var tnow = now();
     for (var i = 0; i < splats.length; i++) A.drawSplat(ctx, splats[i], tnow);
-    if (S.st === 'result' || S.st === 'sweep') drawResult(ctx, t);
+    if (S.st === 'result' || S.st === 'sweep') { drawResult(ctx, t); drawNote(ctx); }
     if (S.st === 'freeze') A.drawComic(ctx, G.cx, G.cy - 30, S.F.word, 0.3 + 0.75 * ease.outBack(clamp(S.t / 0.16, 0, 1)), t, S.F.outline === '#123d14' ? '#d61f3c' : null);
     else if (S.st === 'boom' && S.t < 1.1) {
       ctx.save(); ctx.globalAlpha = clamp((1.1 - S.t) / 0.4, 0, 1);
