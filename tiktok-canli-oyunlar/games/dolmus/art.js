@@ -537,7 +537,7 @@
     ctx.save();
     ctx.font = '900 30px ' + ui.FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#2b1d00';
-    ctx.fillText(S.sideText || '', -120, -70, 420);
+    ctx.fillText(S.sideText || '', -130, -70, 380);
     ctx.restore();
     // tekerlek kemerleri
     ctx.fillStyle = '#1a1a1f';
@@ -810,11 +810,11 @@
 
   // Kanatlar (5.000+ jeton: uçan dolmuş)
   A.wing = function (ctx, x, y, t, back, s) {
-    var flap = Math.sin(t * 10) * 0.45;
-    ctx.save(); ctx.translate(x, y); ctx.scale(s || 1, s || 1); ctx.rotate(-0.35 + flap);
+    var flap = Math.sin(t * 10) * 0.4;
+    ctx.save(); ctx.translate(x, y); ctx.scale(s || 1, s || 1); ctx.rotate(-1.15 + flap);
     var feathers = 6;
     for (var i = feathers - 1; i >= 0; i--) {
-      var len = 130 + i * 34, a = -PI / 2 - 0.15 - i * 0.16;
+      var len = 96 + i * 22, a = -PI / 2 - 0.1 - i * 0.17;
       ctx.save(); ctx.rotate(a + PI / 2);
       ctx.fillStyle = back ? '#d7e6f5' : (i % 2 ? '#ffffff' : '#f3f8ff');
       ctx.beginPath(); ctx.ellipse(0, -len / 2, 24, len / 2, 0, 0, TAU); ctx.fill();
@@ -863,10 +863,10 @@
     b.w = Math.min(440, Math.max(tw, nw) + 36);
     b.h = b.name ? 82 : 56;
   };
-  A.bubble = function (ctx, b, ax, ay, alpha, scale, tailDir) {
+  A.bubble = function (ctx, b, ax, ay, alpha, scale, tailDir, byOverride, bxOverride) {
     var w = b.w, h = b.h;
-    var bx = LG.clamp(ax - w / 2, 48, LG.W - 48 - w);
-    var by = ay - h - 18;
+    var bx = bxOverride != null ? bxOverride : LG.clamp(ax - w / 2, 48, LG.W - 48 - w);
+    var by = byOverride != null ? byOverride : ay - h - 18;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.translate(ax, ay); ctx.scale(scale, scale); ctx.translate(-ax, -ay);

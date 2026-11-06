@@ -151,6 +151,7 @@
       try { a[i](evt); } catch (e) { console.error('[LG] olay işleyici hatası', type, e); }
     }
   }
+  LG.fire = fire; // oyunlar kendi olaylarını da yayınlayabilir
   LG.stats = { chats: 0, likes: 0, gifts: 0, coins: 0, follows: 0, shares: 0, joins: 0, viewers: 0, startedAt: Date.now() };
 
   // Tüm kaynaklardan gelen olaylar buradan geçer.
@@ -182,7 +183,7 @@
         if (!g.name) g.name = 'Hediye';
         LG.stats.gifts += g.count;
         LG.stats.coins += g.total;
-        if (u) { u.coins += g.total; u.giftCount += g.count; }
+        if (u) { u._coinsBeforeLast = u.coins; u.coins += g.total; u.giftCount += g.count; }
         break;
       case 'follow': LG.stats.follows++; if (u) u.followed = true; break;
       case 'share': LG.stats.shares++; if (u) u.shares++; break;
@@ -366,6 +367,55 @@
       return -1;
     },
   };
+
+  // ---------------------------------------------------------------------------
+  // Türkçe ekler: LG.tr.den('Ayşe') -> "Ayşe'den", LG.tr.e('Ali') -> "Ali'ye", LG.tr.in('Murat') -> "Murat'ın"
+  // Rakamla/tek harfle biten adlar okunuşa göre çekilir ('34'ten, 'Gizem K'dan).
+  // ---------------------------------------------------------------------------
+  (function () {
+    var BACK = 'aıouAIOU', FRONT = 'eiöüEİÖÜ', VOWELS = 'aıoueiöüAIOUEİÖÜâîû';
+    var HARD = 'fstkçşhpFSTKÇŞHP';
+    var LETTER = { a: 'a', b: 'be', c: 'ce', ç: 'çe', d: 'de', e: 'e', f: 'fe', g: 'ge', ğ: 'ge', h: 'he', ı: 'ı', i: 'i', j: 'je', k: 'ka', l: 'le', m: 'me', n: 'ne', o: 'o', ö: 'ö', p: 'pe', q: 'ku', r: 're', s: 'se', ş: 'şe', t: 'te', u: 'u', ü: 'ü', v: 've', w: 've', x: 'iks', y: 'ye', z: 'ze' };
+    var DIGIT = ['sıfır', 'bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz'];
+    var TENS = ['', 'on', 'yirmi', 'otuz', 'kırk', 'elli', 'altmış', 'yetmiş', 'seksen', 'doksan'];
+    function spoken(name) {
+      var s = String(name || '').replace(/[^\p{L}\p{N}]+$/u, '');
+      if (!s) return 'e';
+      var m = s.match(/(\d+)$/);
+      if (m) {
+        var n = parseInt(m[1], 10);
+        if (n === 0) return 'sıfır';
+        if (n % 1000 === 0) return 'bin';
+        if (n % 100 === 0) return 'yüz';
+        if (n % 10 === 0) return TENS[(n % 100) / 10];
+        return DIGIT[n % 10];
+      }
+      var parts = s.split(/[\s_.\-]+/);
+      var last = parts[parts.length - 1];
+      if (last.length === 1 && LETTER[last.toLocaleLowerCase('tr')]) return LETTER[last.toLocaleLowerCase('tr')];
+      // Sesli harf yoksa (kısaltma: bjk, gs) harf harf okunur
+      if (!/[aıoueiöüâîû]/i.test(last) && last.length <= 4) return LETTER[last.slice(-1).toLocaleLowerCase('tr')] || last;
+      return last;
+    }
+    function info(name) {
+      var w = spoken(name);
+      var lastV = '';
+      for (var i = w.length - 1; i >= 0; i--) if (VOWELS.indexOf(w[i]) >= 0) { lastV = w[i]; break; }
+      var back = lastV ? BACK.indexOf(lastV) >= 0 || 'âû'.indexOf(lastV) >= 0 : false;
+      var round = 'oöuüOÖUÜ'.indexOf(lastV) >= 0;
+      var lastC = w[w.length - 1];
+      return { back: back, round: round, endsVowel: VOWELS.indexOf(lastC) >= 0, hard: HARD.indexOf(lastC) >= 0 };
+    }
+    function ap(name, suffix) { return String(name) + '’' + suffix; }
+    LG.tr = {
+      den: function (n) { var f = info(n); return ap(n, (f.hard ? 't' : 'd') + (f.back ? 'an' : 'en')); },
+      de: function (n) { var f = info(n); return ap(n, (f.hard ? 't' : 'd') + (f.back ? 'a' : 'e')); },
+      e: function (n) { var f = info(n); return ap(n, (f.endsVowel ? 'y' : '') + (f.back ? 'a' : 'e')); },
+      i: function (n) { var f = info(n); var v = f.back ? (f.round ? 'u' : 'ı') : (f.round ? 'ü' : 'i'); return ap(n, (f.endsVowel ? 'y' : '') + v); },
+      in: function (n) { var f = info(n); var v = f.back ? (f.round ? 'u' : 'ı') : (f.round ? 'ü' : 'i'); return ap(n, (f.endsVowel ? 'n' : '') + v + 'n'); },
+      ile: function (n) { var f = info(n); return String(n) + (f.endsVowel ? ' ile' : ' ile'); },
+    };
+  })();
 
   // ---------------------------------------------------------------------------
   // Bağlantı adaptörleri

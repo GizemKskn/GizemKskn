@@ -32,7 +32,7 @@
   var DS = 0.84;            // dansçı ölçeği
   var MAX_TAGS = 30;        // aynı anda en fazla isim etiketi
   var TAG_POOL = 80;        // etiket adayı (çakışanlar atlanınca etiketler piste yayılsın)
-  var NPC_TARGET = 16;      // kimse yokken halayı çeken köy ahalisi
+  var NPC_TARGET = 22;      // kimse yokken halayı çeken köy ahalisi
   var MAX_ITEMS = 60;       // kurdeledeki en fazla takı (fazlası birleşir: 4 çeyrek = 1 tam)
   var CS = 2.1;             // gelin-damat ölçeği
   var HOME = { x: 546, y: 694 };
@@ -42,7 +42,7 @@
 
   // Eller kamerası üstte ise üst bilgi şeridi kameranın olmadığı tarafa kayar
   var CAMTOP = LG.CAM && LG.CAM.y < 700 ? LG.CAM : null;
-  var L = { hx0: SAFE.x, hx1: SAFE.x + SAFE.w, titleY: 281, signY: 364, chipY: 400, chipH: 40, chipRows: 1, defTop: 452, gaugeY: 456, bannerY: 336, calloutY: 1000, calloutTopY: 590, finCalloutY: 852, tickerY: 1186, plaque: true };
+  var L = { hx0: SAFE.x, hx1: SAFE.x + SAFE.w, titleY: 281, signY: 364, chipY: 400, chipH: 40, chipRows: 1, defTop: 452, gaugeY: 456, bannerY: 324, calloutY: 1000, calloutTopY: 590, finCalloutY: 852, tickerY: 1186, plaque: true };
   // Takı anonsu başlık bölgesinin üstüne açılır: pist (dansçılar + isimler) hiç kapanmaz.
   if (CAMTOP) {
     var camBottom = CAMTOP.y + CAMTOP.h + 8;
@@ -72,7 +72,11 @@
   function ablative(name) {
     var core = String(name).replace(/[^0-9A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû]+$/g, '');
     var suf = 'den';
-    if (core) {
+    var one = core && core.match(/(?:^|[\s._\-])([A-Za-zÇĞİÖŞÜçğıöşü])$/);
+    if (one) { // tek harfle biten ad harfin okunuşuna göre: "Gizem K" → K'dan (ka), "Ali B" → B'den (be)
+      var lc = trLower(one[1]);
+      suf = 'aıouk'.indexOf(lc) >= 0 || lc === 'q' ? 'dan' : lc === 'x' ? 'ten' : 'den';
+    } else if (core) {
       var last = core.charAt(core.length - 1);
       if (/[0-9]/.test(last)) {
         var num = core.match(/[0-9]+$/)[0];
@@ -251,6 +255,7 @@
     gg.addColorStop(0, '#2a2216'); gg.addColorStop(0.3, '#1b2414'); gg.addColorStop(1, '#091007');
     g.fillStyle = gg; g.fillRect(0, 690, W, H - 690);
     drawFloor(g);
+    drawTrack(g);
     drawMusicStage(g);
     drawCoupleStage(g);
     // ışık telleri (teller burada, ampuller her karede yanıp söner)
@@ -315,6 +320,18 @@
     g.restore();
     ui.roundRect(g, x, y, w, h, r); g.lineWidth = 7; g.strokeStyle = '#c99a52'; g.stroke();
     ui.roundRect(g, x + 8, y + 8, w - 16, h - 16, r - 6); g.lineWidth = 2; g.strokeStyle = 'rgba(255,220,150,0.35)'; g.stroke();
+  }
+
+  // Pistte halayın yılan gibi kıvrılan yolu: aşınmış parke izi (hat kısa olsa da rota okunur)
+  function drawTrack(g) {
+    g.save();
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath();
+    for (var i = 0; i <= P.n; i += 4) { var k = i % P.n; if (i === 0) g.moveTo(P.x[k], P.y[k]); else g.lineTo(P.x[k], P.y[k]); }
+    g.closePath();
+    g.strokeStyle = 'rgba(255,214,150,0.075)'; g.lineWidth = 34; g.stroke();
+    g.setLineDash([10, 22]); g.strokeStyle = 'rgba(255,236,200,0.16)'; g.lineWidth = 3; g.stroke();
+    g.restore();
   }
 
   function drawMusicStage(g) {
@@ -660,6 +677,8 @@
   }
   function addDancer(u, npc) {
     var d = newDancer(u, npc);
+    var tail = line[line.length - 1];
+    if (tail && !npc) d.slot = max(d.slot, tail.slot + 1); // sondaki hâlâ kayıyorsa üstüne doğma
     line.push(d);
     if (npc) npcCount++; else { byId.set(u.id, d); realCount++; }
     pathPos(headS - d.slot * spacing, tmpPos); d.x = tmpPos.x; d.y = tmpPos.y; d.dir = tmpPos.dir;
@@ -768,14 +787,14 @@
     var cs = board.get(cand.u), curS = cur.npc ? 0 : board.get(cur.u);
     if (force || (cur.npc && cs >= 4) || (cs > curS * 1.25 + 6 && LG.time - lastLeaderT > 15)) promote(cand);
   }
-  function promote(d, silent) {
+  function promote(d, silent, sub) {
     var i = line.indexOf(d);
     if (i <= 0) return;
     line.splice(i, 1); line.unshift(d);
     lastLeaderT = LG.time; leaderId = d.u.id; d.promo = true; d.lastAct = LG.time;
     if (!silent) {
-      var u = d.u;
-      pushBanner({ kind: 'leader', user: u, top: T.leaderTop, main: T.newLeader + ': ' + u.name + '!', sub: '💬 ' + (u.comments || 0) + ' yorum · ❤️ ' + LG.fmt(u.likes || 0) + ' beğeni — en coşkulu misafir!', dur: 2.6, prio: 1 });
+      var u = d.u, st = '💬 ' + (u.comments || 0) + ' yorum' + (u.likes ? ' · ❤️ ' + LG.fmt(u.likes) + ' beğeni' : '');
+      pushBanner({ kind: 'leader', user: u, top: T.leaderTop, main: T.newLeader + ': ' + u.name + '!', sub: sub || st + ' — en coşkulu misafir!', dur: 2.6, prio: 1 });
     }
     tagTimer = 0;
   }
@@ -788,7 +807,7 @@
     var top = board.top(8), cur = line[0], pick = null;
     for (var i = 0; i < top.length; i++) { var dd = byId.get(top[i].user.id); if (dd && dd !== cur) { pick = dd; break; } }
     if (!pick) { var reals = line.filter(function (x) { return !x.npc && x !== cur; }); pick = reals.length ? LG.pick(reals) : null; }
-    if (pick) promote(pick); else lastLeaderT = LG.time;
+    if (pick) promote(pick, false, T.hostGave); else lastLeaderT = LG.time;
     pushTicker(T.shuffle, '🔀', '#ffd166');
     LG.sfx('whoosh');
     for (var k = 0; k < line.length; k++) { line[k].hop = 1; line[k].hopAmp = 16; }
@@ -1022,9 +1041,9 @@
     tempoMul = 1 + heat * 0.32 + (davSpin > 0 ? 0.12 : 0);
     LG.music.setTempo(STY.tempo * tempoMul);
   }
-  function davulcuCostu() {
+  function davulcuCostu(sub) {
     davSpin = 1.7; heat = 0.6; heatLockUntil = LG.time + 5; nextCostuT = LG.time + 15;
-    pushCallout(T.davulMax, '❤️ Beğeniler davulcuyu uçurdu!', '#ff9f1c', 2.2);
+    pushCallout(T.davulMax, sub || '❤️ Beğeniler davulcuyu uçurdu!', '#ff9f1c', 2.2);
     ui.shake(12, 0.5);
     ui.burst(DAV.x, DAV.y - 80, { count: 8, shape: 'emoji', emoji: '🔥', speed: 380, up: 260, gravity: 700, size: 16, life: 1.3 });
     ui.burst(DAV.x, DAV.y - 80, { count: 30, speed: 520, up: 200 });
@@ -1294,7 +1313,7 @@
   LG.onKey('b', 'Halaybaşını yeniden seç + sırayı karıştır', function () { shuffleLine(); });
   LG.onKey('t', 'Oyun havasını değiştir (sıradaki)', function () { setStyle((styleIdx + 1) % STYLES.length, 'Sunucu seçti 🎙️'); voteT = 0; for (var k = 0; k < votes.length; k++) votes[k] = 0; voters.clear(); });
   LG.onKey('y', 'Düğünü bitir → final + yeni düğün', function () { if (phase === 'finale') finT = max(finT, FINALE_LEN - 0.5); else startFinale(); });
-  LG.onKey('k', 'Davulcuyu coştur', function () { heat = 1; });
+  LG.onKey('k', 'Davulcuyu coştur', function () { if (davSpin <= 0) davulcuCostu('🎙️ Sunucu işaret verdi, davulcu coştu!'); });
 
   // ---------------------------------------------------------------------------
   // Notalar (zurna)
@@ -1337,7 +1356,7 @@
     rib.wig = max(0, rib.wig - dt * 5);
 
     // hat
-    var tgt = LG.clamp(P.len / (line.length + 7), 32, 50);
+    var tgt = LG.clamp(P.len / (line.length + 7), 32, 52);
     spacing += (tgt - spacing) * min(1, dt * 2);
     headS += dt * 26 * STY.speed * tempoMul * (phase === 'finale' ? 0.5 : 1);
     for (i = 0; i < line.length; i++) {
@@ -1418,7 +1437,7 @@
 
     // halaybaşı + isim etiketleri
     leaderTimer -= dt;
-    if (leaderTimer <= 0) { leaderTimer = 2; checkLeader(false); retireIdle(); }
+    if (leaderTimer <= 0) { leaderTimer = 2; if (phase === 'dance') checkLeader(false); retireIdle(); }
     tagTimer -= dt;
     if (tagTimer <= 0) { tagTimer = 0.4; pickTags(); }
   }
@@ -2104,7 +2123,15 @@
     var a = max(0, min(inP, outP));
     var sc = LG.ease.outBack(inP);
     var y = L.bannerY - (1 - outP) * 30 + (1 - inP) * -40;
-    var w = 968, h = b.big ? 196 : 164, isLeader = b.kind === 'leader';
+    var top = L.bannerY < 600;
+    var w = 968, h = top ? (b.big ? 178 : 150) : (b.big ? 196 : 164), isLeader = b.kind === 'leader';
+    if (top) { // üst bilgi şeridi anons boyunca kararır (altından çipler görünüp karışmasın)
+      ctx.save(); ctx.globalAlpha = a;
+      var dg = ctx.createLinearGradient(0, 228, 0, 458);
+      dg.addColorStop(0, 'rgba(14,2,18,0)'); dg.addColorStop(0.1, 'rgba(14,2,18,0.72)'); dg.addColorStop(0.84, 'rgba(14,2,18,0.72)'); dg.addColorStop(1, 'rgba(14,2,18,0)');
+      ctx.fillStyle = dg; ctx.fillRect(0, 228, W, 230);
+      ctx.restore();
+    }
     ctx.save();
     ctx.globalAlpha = a;
     ctx.translate(540, y); ctx.scale(sc, sc);
@@ -2145,7 +2172,7 @@
     var cy = L.calloutY;
     if (couple.off) cy = phase === 'finale' && finT > 1.6 ? L.finCalloutY : L.calloutTopY;
     ctx.translate(540, cy); ctx.scale(sc, sc);
-    ctx.fillStyle = 'rgba(20,0,20,0.55)';
+    ctx.fillStyle = couple.off ? 'rgba(20,0,20,0.74)' : 'rgba(20,0,20,0.55)';
     ui.roundRect(ctx, -470, -70, 940, c.sub ? 150 : 110, 40); ctx.fill();
     ui.text(ctx, c.text, 0, -12, { size: 70, color: c.color, maxWidth: 900, strokeColor: '#3a0010', strokeWidth: 12 });
     if (c.sub) ui.text(ctx, c.sub, 0, 50, { size: 36, color: '#ffffff', maxWidth: 880 });

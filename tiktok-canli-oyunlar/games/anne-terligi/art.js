@@ -34,24 +34,15 @@
   // ---------------------------------------------------------------------------
   // TERLİK (mavi plastik ev terliği, sarı bant)
   // ---------------------------------------------------------------------------
-  // Üstten görünüş ev terliği: ayak biçimli taban (topuk solda, burun sağda) + kırmızı burun kapağı
+  // Üstten görünüş "Tokyo" terlik (parmak arası): ayak biçimli taban (topuk solda, burun sağda) + V bant
   function solePath(ctx) {
     ctx.beginPath();
     ctx.moveTo(-49, 0);
-    ctx.bezierCurveTo(-49, -15, -37, -18, -20, -17);
-    ctx.bezierCurveTo(4, -16, 22, -25, 39, -22);
-    ctx.bezierCurveTo(55, -19, 56, 19, 39, 22);
-    ctx.bezierCurveTo(22, 25, 4, 16, -20, 17);
-    ctx.bezierCurveTo(-37, 18, -49, 15, -49, 0);
-    ctx.closePath();
-  }
-  function capPath(ctx) {
-    ctx.beginPath();
-    ctx.moveTo(-2, -20);
-    ctx.bezierCurveTo(18, -29, 42, -28, 50, -15);
-    ctx.bezierCurveTo(57, -5, 57, 5, 50, 15);
-    ctx.bezierCurveTo(42, 28, 18, 29, -2, 20);
-    ctx.quadraticCurveTo(-12, 0, -2, -20);
+    ctx.bezierCurveTo(-49, -16, -37, -19, -20, -18);
+    ctx.bezierCurveTo(2, -16, 20, -24, 38, -22);
+    ctx.bezierCurveTo(56, -19, 56, 19, 38, 22);
+    ctx.bezierCurveTo(20, 24, 2, 16, -20, 18);
+    ctx.bezierCurveTo(-37, 19, -49, 16, -49, 0);
     ctx.closePath();
   }
   A.slipper = function (ctx, x, y, len, rot, o) {
@@ -61,32 +52,30 @@
     if (rot) ctx.rotate(rot);
     var s = len / 100;
     ctx.scale(s, s);
-    ctx.lineJoin = 'round';
-    // taban (koyu kenar) + iç taban
-    ctx.fillStyle = o.sole || '#4a2a17';
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    // taban kenarı + iç taban
+    ctx.fillStyle = o.sole || '#0e2f66';
     solePath(ctx); ctx.fill();
-    ctx.strokeStyle = '#1e0f06'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.save(); ctx.translate(-3, 0); ctx.scale(0.86, 0.74);
-    ctx.fillStyle = o.bed || '#f2c98f';
+    ctx.save(); ctx.translate(-1, 0); ctx.scale(0.88, 0.76);
+    ctx.fillStyle = o.bed || '#3d8bff';
     solePath(ctx); ctx.fill();
     ctx.restore();
-    // topuk izi
-    ctx.fillStyle = 'rgba(160,100,50,0.35)';
-    ell(ctx, -30, 0, 10, 8); ctx.fill();
-    // burun kapağı
-    ctx.fillStyle = o.cap || '#e63946';
-    capPath(ctx); ctx.fill();
-    ctx.strokeStyle = '#7a1020'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ell(ctx, 30, -10, 13, 5, -0.2); ctx.fill();
-    // ağız kenarı biyesi
-    ctx.strokeStyle = o.trim || '#ffd23f'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(-1, -18); ctx.quadraticCurveTo(-10, 0, -1, 18); ctx.stroke();
-    // ponpon
-    ctx.fillStyle = '#fff';
-    circle(ctx, 16, 0, 8); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-    circle(ctx, 18, 2, 4); ctx.fill();
+    // ayak izi (topuk + parmaklar)
+    ctx.fillStyle = 'rgba(10,40,100,0.35)';
+    ell(ctx, -30, 0, 11, 9); ctx.fill();
+    ell(ctx, 40, -9, 5, 4); ctx.fill(); ell(ctx, 44, 1, 4.5, 3.5); ctx.fill(); ell(ctx, 41, 10, 4, 3.5); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ell(ctx, -6, -9, 22, 3.5); ctx.fill();
+    // V bant (parmak arası)
+    var strap = o.strap || '#ffd23f';
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 13;
+    ctx.beginPath(); ctx.moveTo(-4, -19); ctx.quadraticCurveTo(14, -12, 31, 0); ctx.quadraticCurveTo(14, 12, -4, 19); ctx.stroke();
+    ctx.strokeStyle = strap; ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.moveTo(-4, -19); ctx.quadraticCurveTo(14, -12, 31, 0); ctx.quadraticCurveTo(14, 12, -4, 19); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-2, -19); ctx.quadraticCurveTo(14, -13, 28, -2); ctx.stroke();
+    ctx.fillStyle = '#e63946';
+    circle(ctx, 32, 0, 6); ctx.fill();
     ctx.restore();
   };
   var slipCache = {};
@@ -94,8 +83,8 @@
     var c = slipCache[len];
     if (c) return c;
     c = document.createElement('canvas');
-    c.width = Math.ceil(len * 1.16); c.height = Math.ceil(len * 0.66);
-    A.slipper(c.getContext('2d'), c.width / 2 - len * 0.04, c.height / 2, len, 0);
+    c.width = Math.ceil(len * 1.12); c.height = Math.ceil(len * 0.56);
+    A.slipper(c.getContext('2d'), c.width / 2 - len * 0.02, c.height / 2, len, 0);
     slipCache[len] = c;
     return c;
   };
@@ -717,13 +706,21 @@
   };
 
   // Buzdolabı (dinamik: parıltı + kapı açılması)
+  var glowCv = null;
   A.fridge = function (ctx, t, open, glow, treatId) {
     var F = GEO.FRIDGE;
-    // parıltı
+    // parıltı (önceden çizilmiş, her karede tek drawImage)
+    if (!glowCv) {
+      glowCv = document.createElement('canvas');
+      glowCv.width = F.w + 300; glowCv.height = F.h + 240;
+      var gx = glowCv.getContext('2d');
+      var gg = gx.createRadialGradient(200 + F.w / 2, 120 + F.h / 2, 40, 200 + F.w / 2, 120 + F.h / 2, 260);
+      gg.addColorStop(0, 'rgba(160,240,255,0.28)'); gg.addColorStop(1, 'rgba(160,240,255,0)');
+      gx.fillStyle = gg; gx.fillRect(0, 0, glowCv.width, glowCv.height);
+    }
     ctx.save();
-    var gg = ctx.createRadialGradient(F.x + F.w / 2, F.y + F.h / 2, 40, F.x + F.w / 2, F.y + F.h / 2, 260);
-    gg.addColorStop(0, 'rgba(160,240,255,' + (0.28 * glow) + ')'); gg.addColorStop(1, 'rgba(160,240,255,0)');
-    ctx.fillStyle = gg; ctx.fillRect(F.x - 200, F.y - 120, F.w + 300, F.h + 240);
+    ctx.globalAlpha *= LG.clamp(glow, 0, 1);
+    ctx.drawImage(glowCv, F.x - 200, F.y - 120);
     ctx.restore();
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ell(ctx, F.x + F.w / 2, F.y + F.h, F.w * 0.6, 12); ctx.fill();
     // gövde

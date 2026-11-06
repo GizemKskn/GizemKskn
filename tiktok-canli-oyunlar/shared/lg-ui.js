@@ -26,7 +26,7 @@
       var w = ctx.measureText(str).width;
       if (w > o.maxWidth) {
         var s = (o.size || 40) * o.maxWidth / w;
-        ctx.font = ui.font(s, o.weight);
+        ctx.font = o.font ? o.font.replace(/(\d+(\.\d+)?)px/, function (m, n) { return (parseFloat(n) * o.maxWidth / w).toFixed(1) + 'px'; }) : ui.font(s, o.weight);
       }
     }
     if (o.shadow) { ctx.shadowColor = o.shadow; ctx.shadowBlur = o.shadowBlur || 12; }
@@ -42,14 +42,59 @@
     ctx.restore();
   };
 
+  // Emoji'ler küçük tuvallerde önbelleklenir (hızlı ve dönüşümler altında kaybolmaz)
+  var emojiCache = new Map();
+  ui.emojiCanvas = function (e, size) {
+    var sz = Math.max(8, Math.round(size / 2) * 2);
+    var key = e + '|' + sz;
+    var c = emojiCache.get(key);
+    if (c) return c;
+    if (emojiCache.size > 800) emojiCache.clear();
+    c = document.createElement('canvas');
+    var pad = Math.ceil(sz * 0.25);
+    c.width = c.height = sz + pad * 2;
+    var cx = c.getContext('2d');
+    cx.font = sz + 'px ' + ui.EMOJI_FONT;
+    cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.fillText(e, c.width / 2, c.height / 2 + sz * 0.04);
+    c._scale = size / sz;
+    emojiCache.set(key, c);
+    return c;
+  };
   ui.emoji = function (ctx, e, x, y, size, alpha) {
+    if (!e) return;
+    var c = ui.emojiCanvas(e, size);
+    var k = size / (c.width - Math.ceil(Math.max(8, Math.round(size / 2) * 2) * 0.25) * 2);
+    var w = c.width * k, h = c.height * k;
+    if (alpha != null) { var ga = ctx.globalAlpha; ctx.globalAlpha = ga * alpha; ctx.drawImage(c, x - w / 2, y - h / 2, w, h); ctx.globalAlpha = ga; }
+    else ctx.drawImage(c, x - w / 2, y - h / 2, w, h);
+  };
+
+  // Metni verilen genişliğe göre satırlara böler: LG.ui.wrap(ctx, metin, maxW, font) -> ['satır1', ...]
+  ui.wrap = function (ctx, text, maxW, font) {
     ctx.save();
-    if (alpha != null) ctx.globalAlpha *= alpha;
-    ctx.font = Math.round(size) + 'px ' + ui.EMOJI_FONT;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(e, x, y);
+    if (font) ctx.font = font;
+    var words = String(text || '').split(/\s+/), lines = [], cur = '';
+    for (var i = 0; i < words.length; i++) {
+      var t = cur ? cur + ' ' + words[i] : words[i];
+      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = words[i]; } else cur = t;
+    }
+    if (cur) lines.push(cur);
     ctx.restore();
+    return lines;
+  };
+  // Çok satırlı metni kutuya sığdırır; sığmazsa yazı boyutunu küçültür. Döndürdüğü: kullanılan boyut
+  ui.textBox = function (ctx, text, x, y, maxW, maxH, o) {
+    o = o || {};
+    var size = o.size || 40, minSize = o.minSize || 20, lh = o.lineHeight || 1.22, lines;
+    for (; size >= minSize; size -= 2) {
+      lines = ui.wrap(ctx, text, maxW, ui.font(size, o.weight));
+      if (lines.length * size * lh <= maxH) break;
+    }
+    var total = lines.length * size * lh;
+    var y0 = o.valign === 'top' ? y : y - total / 2 + size * lh / 2;
+    for (var i = 0; i < lines.length; i++) ui.text(ctx, lines[i], x, y0 + i * size * lh, { size: size, color: o.color, align: o.align || 'center', weight: o.weight, stroke: o.stroke, strokeColor: o.strokeColor });
+    return size;
   };
 
   ui.roundRect = function (ctx, x, y, w, h, r) {
@@ -282,6 +327,8 @@
       });
     }
   };
+  ui.clearFloats = function () { floats.length = 0; };
+  ui.clearParticles = function () { parts.length = 0; };
   ui.float = function (text, x, y, o) {
     o = o || {};
     if (floats.length > 80) floats.shift();
@@ -311,16 +358,25 @@
   var lastSpot = new Map();
   var capThanked = new Set();
   ui.spotlightAllowed = function (u, tier) {
+    ui.lastSpotlightReason = '';
     if (!u || tier < 3) return true;
-    if (LG.spotlightMuted && LG.spotlightMuted.has(u.id)) return false;
+    if (LG.spotlightMuted && LG.spotlightMuted.has(u.id)) { ui.lastSpotlightReason = 'muted'; return false; }
     var cap = LG.config.softcap;
-    if (cap > 0 && u.coins > cap) {
-      if (!capThanked.has(u.id)) { capThanked.add(u.id); ui.toast(u.name + ', efsanesin! Çok teşekkürler 💖', { icon: '👑', color: '#ffd166', life: 5 }); }
+    // Bu hediyeden ÖNCEKİ toplam kullanılır: tek bir büyük hediye kendi kutlamasını kaybetmesin.
+    var before = u._coinsBeforeLast != null ? u._coinsBeforeLast : u.coins;
+    if (cap > 0 && before >= cap) {
+      ui.lastSpotlightReason = 'softcap';
+      if (!capThanked.has(u.id)) {
+        capThanked.add(u.id);
+        if (LG.fire) LG.fire('softcap', { user: u });
+        if (ui.toastsEnabled) ui.toast(u.name + ', efsanesin! Çok teşekkürler 💖', { icon: '👑', color: '#ffd166', life: 5 });
+      }
       return false;
     }
+    if (tier < 4) return true; // orta boy kutlamalar bekleme süresini tüketmez
     var now = LG.now();
     var last = lastSpot.get(u.id) || -999;
-    if (now - last < LG.config.spotlightCooldown) return false;
+    if (now - last < LG.config.spotlightCooldown) { ui.lastSpotlightReason = 'cooldown'; return false; }
     lastSpot.set(u.id, now);
     return true;
   };
@@ -591,7 +647,7 @@
     }
     // Bağlantı durumu (değişince 5 sn görünür)
     if (!LG.config.hideStatus && (connShowT > 0 || LG.config.debug)) {
-      connShowT -= 1 / 60;
+      var nowT = LG.time || 0; connShowT -= Math.max(0, Math.min(0.1, nowT - (ui._lastConnT || nowT))); ui._lastConnT = nowT;
       var st = LG.conn.state;
       var col = st === 'bağlı' ? '#06d6a0' : st === 'simülasyon' ? '#4cc9f0' : '#ff4d6d';
       ctx.save();
@@ -611,7 +667,7 @@
       var keys = LG.keyHelp();
       for (var h = 0; h < keys.length; h++) {
         ui.text(ctx, keys[h].key.toUpperCase(), 200, 420 + h * 64, { size: 40, color: '#4cc9f0' });
-        ui.text(ctx, keys[h].desc, 270, 420 + h * 64, { size: 36, align: 'left', maxWidth: 760 });
+        ui.text(ctx, keys[h].desc, 270, 420 + h * 64, { size: keys[h].desc.length > 34 ? 30 : 36, align: 'left', maxWidth: 780 });
       }
       ctx.restore();
     }

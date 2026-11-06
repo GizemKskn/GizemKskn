@@ -43,6 +43,7 @@
       bilezik: 'BİLEZİK SETİ! 💍✨',
       hey: 'HEY!',
       shuffle: 'Halay karıştı! 🔀',
+      hostGave: 'Sunucu mendili verdi 🎙️ — hadi bakalım, göster kendini!',
       hints: [
         '💬 Yorum yaz → halaya katıl',
         '🎶 halay/horon/çiftetelli yaz → oyun havası seç',
@@ -81,7 +82,8 @@
     ],
     // Henüz kimse yokken halayı çeken köy ahalisi (gerçek izleyiciler gelince masalara oturur)
     NPC: ['Hüsnü Dayı', 'Fadime Teyze', 'Rıza Amca', 'Nazmiye Hala', 'Bekir Enişte', 'Cemile Yenge', 'Kâmil Dede', 'Sabahat Abla', 'Şükrü Amca', 'Hayriye Nine',
-      'Cafer Abi', 'Zehra Yenge', 'Necmi Amca', 'Ayten Teyze', 'Halil Dayı', 'Gülizar Hala'],
+      'Cafer Abi', 'Zehra Yenge', 'Necmi Amca', 'Ayten Teyze', 'Halil Dayı', 'Gülizar Hala', 'Yaşar Amca', 'Melahat Teyze', 'Recep Dayı',
+      'Saniye Yenge', 'Kadir Abi', 'Emine Nine'],
     COUPLES: [['Zeynep', 'Emre'], ['Elif', 'Burak'], ['Ayşe', 'Mehmet'], ['Merve', 'Can'], ['Selin', 'Kerem'], ['Esra', 'Yusuf'],
       ['Derya', 'Onur'], ['Büşra', 'Ömer'], ['Gül', 'Hasan'], ['İrem', 'Barış'], ['Sude', 'Kaan'], ['Ebru', 'Cem']],
     // Oyun havaları: anahtar kelimeler yorumda geçerse oy sayılır

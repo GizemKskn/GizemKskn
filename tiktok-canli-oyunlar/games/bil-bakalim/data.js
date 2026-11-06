@@ -317,7 +317,7 @@ window.BB_DATA = {
     [['⚫', '🌊'], 'karadeniz', 'Yer', ['kara deniz']],
     [['⚪', '🌊'], 'akdeniz', 'Yer', ['ak deniz']],
     [['🤕', '⛰️'], 'ağrı dağı', 'Yer', []],
-    [['🚐', '🏞️'], 'van gölü', 'Yer', []],
+    [['🐈', '🏞️'], 'van gölü', 'Yer', []],
     [['🥛', '🍚'], 'sütlaç', 'Tatlı', []],
     [['🥚', '🍅', '🍳'], 'menemen', 'Yemek', []],
     [['🍋', '🧊', '🥤'], 'limonata', 'İçecek', []],

@@ -9,7 +9,8 @@
  *   🎁 Hediye                          → anneyi oyala: herkes için yeşil süre (kozmetik/topluluk etkisi; ödül yok)
  *
  * Sunucu: T = anne şimdi dönsün · G = yeşil (anne işine dönsün) · N = yeni tur · B = turu bitir
- * URL: ?tur=150 (tur saniyesi) · ?kazanan=10 (tur kaç kişide biter) · ?adim=0.085 (adım büyüklüğü)
+ * URL: ?tur=150 (tur saniyesi) · ?kazanan=10 (tur kaç kişide biter) · ?adim=0.11 (adım büyüklüğü, ~9 adımda dolap)
+ *      ?tolerans=0.5 (anne döndükten sonra kaç sn gelen yorum affedilir — yayın gecikmesi için)
  */
 (function () {
   'use strict';
@@ -21,7 +22,8 @@
   var CFG = {
     roundLen: LG.clamp(LG.qn('tur', 150), 45, 600),
     maxWin: LG.clamp(LG.qn('kazanan', 10), 1, 10),
-    step: LG.clamp(LG.qn('adim', 0.085), 0.02, 0.5),
+    step: LG.clamp(LG.qn('adim', 0.11), 0.02, 0.5),
+    grace: LG.clamp(LG.qn('tolerans', 0.5), 0, 2),   // anne döner dönmez gelen (yayın gecikmeli) yorumlar için kısa hoşgörü
     tiny: 0.028,
     finalSec: 30,
     endCard: 9,
@@ -40,7 +42,7 @@
 
   // Yol geometrisi (koridor: aşağıda başlangıç çizgisi, yukarıda mutfak + buzdolabı)
   var Y0 = 1180, YT = 760, FX = 818, FY = 752, PH = 0.88;
-  var SEAT_Y = 716;
+  var SEAT_Y = 722, SEAT_S = 0.66;
   var HIT_DUR = 1.0;
 
   // ---------------------------------------------------------------------------
@@ -65,7 +67,7 @@
   var feedArr = [], banners = [], banner = null, bannerGap = 0, bigs = [], big = null;
   var slow = { on: false, after: 0, max: 0, fx: 540, fy: 900 };
   var cam = { z: 1 };
-  var visFull = [], visMini = [], drawList = [], tagList = [], hiddenCount = 0, selT = 0, selDirty = true;
+  var visFull = [], visMini = [], drawList = [], tagList = [], hiddenCount = 0, selT = 0, selDirty = true, leader = null;
   var bg = null, chalkCv = null, chalkT = 0, chalkDirty = true;
   var L = layout();
 
@@ -136,7 +138,7 @@
     return out;
   }
   function dispP(k) { return k.stepT >= 1 ? k.p : LG.lerp(k.pFrom, k.p, LG.ease.outCubic(k.stepT)); }
-  function seatPos(i) { return { x: 70 + i * 27, y: SEAT_Y - (i % 2) * 7 }; }
+  function seatPos(i) { return { x: 62 + i * 29, y: SEAT_Y - (i % 2) * 10 }; }
 
   function ensureKid(u, quiet) {
     var k = kids.get(u.id);
@@ -163,10 +165,18 @@
     if (!canAct(k)) return false;
     if (LG.time - k.lastStep < (isLike ? 0.18 : 0.32)) return false;
     if (!auto) k.lastAct = LG.time;
-    if (isRed()) { caught(k); return false; }
+    if (isRed()) {
+      if (mom.st === 'turn' || mom.t < CFG.grace) {
+        // anne daha yeni dönüyor: çocuk son anda donar (ne adım ne terlik)
+        if (k.vis === 2 && LG.time - lastPhew > 0.5) { lastPhew = LG.time; ui.float('😬 son anda!', k.x, k.y - 125 * k.s, { color: '#fff3a0', size: 26, life: 1 }); }
+        return false;
+      }
+      caught(k); return false;
+    }
     k.lastStep = LG.time;
     k.pFrom = dispP(k);
     k.p = Math.min(1, k.p + amt * (S.final ? 2 : 1));
+    if (k.p >= 1 && (S.winners.length >= CFG.maxWin || S.endAt)) k.p = 0.975;   // dolap doldu: tur bitiyor
     k.stepT = 0; k.stepDur = isLike ? 0.28 : 0.42; k.stepN++;
     k.lastMove = LG.time;
     if (k.p >= 1) reach(k);
@@ -196,8 +206,8 @@
     k.u.data.atTreats = (k.u.data.atTreats || 0) + 1;
     S.fridgeOpenT = 1.8;
     var medal = k.rank <= 3 ? ['🥇', '🥈', '🥉'][k.rank - 1] + ' ' : '';
-    addBanner({ kind: 'win', user: k.u, text: medal + S.treat.acc + ' KAPTI: ' + k.u.name + '!', sub: k.rank + '. sırada buzdolabına ulaştı · +1 ' + S.treat.emoji, icon: S.treat.emoji, color: '#ffd166', dur: 2.6, front: k.rank <= 3 });
-    ui.float('KAPTI! ' + S.treat.emoji, G.FRIDGE.x + 60, G.FRIDGE.y - 10, { color: '#ffd166', size: 52, life: 1.8 });
+    addBanner({ kind: 'win', user: k.u, names: [k.u.name], text: medal + S.treat.acc + ' KAPTI: ' + k.u.name + '!', sub: k.rank + '. sırada buzdolabına ulaştı · +1 ' + S.treat.emoji + (k.rank === CFG.maxWin ? ' · DOLAP BOŞALDI!' : ''), icon: S.treat.emoji, color: '#ffd166', dur: 2.6, front: k.rank <= 3, rank: k.rank });
+    ui.float('KAPTI! ' + S.treat.emoji, G.FRIDGE.x + 80, G.FRIDGE.y + 120, { color: '#ffd166', size: 50, life: 1.6, vy: -60 });
     ui.burst(FX + 30, FY - 80, { count: k.rank === 1 ? 70 : 34, speed: 650 });
     LG.sfx('coin'); LG.sfx(k.rank === 1 ? 'fanfare' : 'win');
     if (k.rank === 1) ui.shake(8, 0.3);
@@ -208,7 +218,7 @@
   // ---------------------------------------------------------------------------
   // Terlik fırlatma
   // ---------------------------------------------------------------------------
-  var nextLaunch = 0, lastAyy = 0;
+  var nextLaunch = 0, lastAyy = 0, lastPhew = 0;
   function headPos(k) { return { x: k.x, y: k.y - 88 * k.s }; }
   function updateThrows(dtw) {
     var canLaunch = mom.st === 'look' || (mom.st === 'turn' && mom.t > 0.18);
@@ -254,7 +264,7 @@
   function impact(k, f) {
     var hp = headPos(k);
     var big = f && f.slow;
-    if (k.state !== 'caught') return;
+    if (k.state !== 'caught') { if (f) dropSlip(f.x1, f.y1, f.x1 + LG.rand(-50, 50), k.y + 10, k.s); if (big) slow.after = 0.2; return; }
     if (k.pillow > 0) {
       k.pillow--; k.state = 'idle'; k.dazeT = 0.4;
       comic(hp.x, hp.y - 46 * k.s, 'PUF!', '#d7c8ff', 46 * Math.max(0.8, k.s), -0.15);
@@ -292,7 +302,7 @@
   // ---------------------------------------------------------------------------
   // Anne (durum makinesi)
   // ---------------------------------------------------------------------------
-  function say(text, dur) { mom.bubble = { text: text, t: 0, dur: dur || 1.6 }; }
+  function say(text, dur, size) { mom.bubble = { text: text, t: 0, dur: dur || 1.6, size: size || 31 }; }
   function musicOn() {
     if (S.phase !== 'play') return;
     var want = S.final ? 'race' : 'chill';
@@ -302,7 +312,7 @@
 
   function startBusy(d) {
     mom.st = 'busy'; mom.t = 0;
-    mom.dur = d != null ? d : S.final ? LG.rand(3.4, 6) : LG.rand(4.6, 8.6);
+    mom.dur = d != null ? d : S.final ? LG.rand(3.6, 6.2) : LG.rand(5, 9);
     if (!mom.distract) {
       mom.act = Math.random() < 0.62 ? 'bulasik' : 'tencere';
       mom.tx = mom.act === 'bulasik' ? 540 : 700;
@@ -315,7 +325,7 @@
     mom.still = true; mom.tilt = 0.14;
     musicOff();
     LG.sfx('drum');
-    say('👀 Hmm?', mom.dur + 0.4);
+    say('👀 Hmm?', mom.dur + 0.4, 40);
   }
   function afterWarn() {
     if (!mom.lastFake && Math.random() < 0.22) {
@@ -335,7 +345,7 @@
   }
   function startLook() {
     mom.st = 'look'; mom.t = 0;
-    mom.dur = S.final ? LG.rand(2.1, 3.2) : LG.rand(2.4, 3.8);
+    mom.dur = S.final ? LG.rand(2.2, 3.2) : LG.rand(2.4, 3.6);
     mom.view = 'front'; mom.flip = 1; mom.tilt = 0;
     say(LG.pick(['Ne oluyor orada?! 🤨', 'Kim kıpırdadı?', 'Uyumadınız mı siz?!', 'Hıh?!', 'Bana bakın bakayım!']), 1.3);
   }
@@ -537,11 +547,12 @@
     S.treat = TREATS[(S.round - 1) % TREATS.length];
     S.phase = 'play'; S.roundT = 0; S.endT = 0; S.introT = 3.4; S.final = false;
     S.winners = []; S.hits = 0; S.hitKids = new Set(); S.endAt = 0; S.rainT = -1; S.rainBy = null; S.sum = null;
-    S.vaseBroken = false; S.roundStart = LG.time;
+    S.vaseBroken = false; S.roundStart = LG.time || 0;   // ilk turda LG.time henüz tanımsız olabilir
     pending = []; flights = []; floorS = []; shards = []; rainP = [];
+    banners = []; banner = null; bigs = []; big = null; bannerGap = 3.6;
     cat = null; mom.distract = null; mom.queued = null; mom.cool = 0; mom.pendingTurn = false;
     // eski (5 dk'dır sessiz) çocukları temizle, diğerlerini başlangıca diz
-    var now = LG.time;
+    var now = LG.time || 0;
     kidList = kidList.filter(function (k) {
       if (now - k.lastAct > 300) { kids.delete(k.id); return false; }
       k.p = 0; k.pFrom = 0; k.stepT = 1; k.state = 'idle'; k.st = 0; k.terlik = 0; k.dazeT = 0; k.rank = 0; k.seat = -1; k.caughtRed = -1;
@@ -586,7 +597,9 @@
     if (S.phase !== 'play' || S.rainT >= 0) return false;
     S.rainT = 0; S.rainBy = user;
     rainP = [];
-    for (var i = 0; i < 70; i++) rainP.push({ x: LG.rand(40, 1040), y: LG.rand(-900, 120), vy: LG.rand(380, 620), r: LG.rand(0, 6), vr: LG.rand(-4, 4), s: LG.rand(0.7, 1.25) });
+    banners = banners.filter(function (b) { return b.kind === 'win'; });
+    if (banner && banner.kind !== 'win') banner.dur = Math.min(banner.dur, banner.t + 0.3);
+    for (var i = 0; i < 48; i++) rainP.push({ x: LG.rand(40, 1040), y: LG.rand(-900, 120), vy: LG.rand(380, 620), r: LG.rand(0, 6), vr: LG.rand(-4, 4), s: LG.rand(0.7, 1.25) });
     mom.distract = null; mom.queued = null; pending = [];
     mom.st = 'away'; mom.view = 'front'; mom.flip = 1; mom.still = true;
     mom.distract = { kind: 'rain', user: user, thanks: user, t: 0, k0: 0, dur: 99, sayT: 99, line: 0, autoT: 99 };
@@ -616,6 +629,19 @@
   }
   function addBanner(o) {
     o.t = 0; o.dur = o.dur || 2.4; o.extra = 0;
+    if (o.kind === 'win' && o.rank > 3) {
+      // kalabalıkta kazanan şeritlerini birleştir
+      for (var w = banners.length - 1; w >= 0; w--) {
+        var q = banners[w];
+        if (q.kind === 'win' && q.rank > 3) {
+          q.names.push(o.names[0]); q.user = o.user; q.rank = o.rank;
+          var shown = q.names.slice(-3).join(', ');
+          q.text = S.treat.acc + ' KAPTILAR: ' + shown + (q.names.length > 3 ? ' +' + (q.names.length - 3) : '') + '!';
+          q.sub = q.names.length + ' kişi daha buzdolabına ulaştı · +1 ' + S.treat.emoji + (o.rank >= CFG.maxWin ? ' · DOLAP BOŞALDI!' : '');
+          return;
+        }
+      }
+    }
     if (o.key) {
       for (var i = 0; i < banners.length; i++) {
         if (banners[i].key === o.key) { banners[i].extra++; banners[i].user = o.user; banners[i].text = o.text; return; }
@@ -627,8 +653,9 @@
       if (banners.length > 5) banners.length = 5;
     }
   }
-  function addBig(o) {
+  function addBig(o, urgent) {
     o.t = 0; o.dur = o.dur || 2.8;
+    if (urgent) { bigs = []; big = o; return; }
     bigs.push(o);
     if (bigs.length > 3) bigs.shift();
   }
@@ -696,7 +723,7 @@
     }
     if (tier >= 5 && bigOk) {
       if (baklavaRain(u)) {
-        addBig({ title: S.treat.name + ' YAĞMURU!', sub: 'Herkes kazandı! Tur bitiyor 🎉', thanks: 'Teşekkürler ' + u.name + '! 💖', icon: S.treat.emoji, user: u, color: '#ffd166', dur: 3.2, treat: true });
+        addBig({ title: S.treat.name + ' YAĞMURU!', sub: 'Herkes kazandı! Tur bitiyor 🎉', thanks: 'Teşekkürler ' + u.name + '! 💖', icon: S.treat.emoji, user: u, color: '#ffd166', dur: 5.4, treat: true }, true);
         return;
       }
     }
@@ -710,6 +737,11 @@
     }
     var r = distract(kind, u, 1);
     var D = DIS[kind];
+    if (r === 'none') {
+      addBig({ title: 'ÇOK TEŞEKKÜRLER! 💖', sub: g.name + (g.count > 1 ? ' x' + g.count : '') + ' — harikasın!', thanks: u.name, icon: gem, user: u, color: '#ffd166', dur: 2.6 });
+      LG.sfx('levelup');
+      return;
+    }
     addBig({ title: D.title, sub: r === 'queued' ? 'Sırada: anne birazdan oyalanacak ⏳' : r === 'extended' ? 'Anne daha da oyalanıyor — devam!' : kind === 'phone' ? 'Anne 10 sn telefonda — herkes ilerlesin!' : 'Anne kapıda — herkes sinsice ilerliyor!', thanks: 'Teşekkürler ' + u.name + '! 💖', icon: gem, user: u, color: kind === 'phone' ? '#9bf6ff' : '#ffd166', dur: 3 });
     LG.sfx(tier >= 4 ? 'fanfare' : 'levelup');
     ui.burst(540, 940, { count: tier >= 4 ? 90 : 50, speed: 750 });
@@ -773,11 +805,16 @@
       var atStart = kk.p <= 0 && kk.state === 'idle';
       if (visFull.length < FULL_CAP && (!atStart || kk._anim || startShown < START_CAP)) {
         if (atStart) startShown++;
-        visFull.push(kk); kk.vis = 2; continue;
+        visFull.push(kk); kk.vis = 2;
+        if (kk.state === 'idle') pathPoint(kk, dispP(kk), kk);
+        continue;
       }
-      if (visMini.length < MINI_CAP && !atStart) { visMini.push(kk); kk.vis = 1; continue; }
+      if (visMini.length < MINI_CAP && !atStart) { visMini.push(kk); kk.vis = 1; if (kk.state === 'idle') pathPoint(kk, dispP(kk), kk); continue; }
       hiddenCount++;
     }
+    // en öndeki (taç)
+    leader = null;
+    for (var l = 0; l < visFull.length; l++) { var lk = visFull[l]; if (lk.state === 'idle' && lk.p > 0.15 && (!leader || lk.p > leader.p)) leader = lk; }
     // isim etiketi adayları
     var cand = [];
     for (var m = 0; m < visFull.length; m++) {
@@ -788,6 +825,7 @@
       else if (now - c.lastMove < 4) pr = 4;
       else if (c.p > 0.45) pr = 2 + c.p;
       else if (c.pillow > 0 || c.glowT > 0) pr = 1.5;
+      if (c === leader) pr = 6;
       if (pr > 0) { c._tp = pr + c.p * 0.5 + (c.lastAct - now) * 0.001; cand.push(c); }
     }
     cand.sort(function (a, b) { return b._tp - a._tp; });
@@ -829,12 +867,12 @@
         } else {
           k.hopT += dtw;
           var uh = Math.min(1, k.hopT / 0.32);
-          k.y = LG.lerp(FY, sp.y, uh); k.s = LG.lerp(scaleAt(FY), 0.52, uh);
+          k.y = LG.lerp(FY, sp.y, uh); k.s = LG.lerp(scaleAt(FY), SEAT_S, uh);
           if (uh >= 1) { k.state = 'seated'; k.st = 0; }
         }
       } else if (st === 'seated') {
         var sp2 = seatPos(k.seat);
-        k.x = sp2.x; k.y = sp2.y; k.s = 0.52;
+        k.x = sp2.x; k.y = sp2.y; k.s = SEAT_S;
       }
     }
   }
@@ -856,7 +894,7 @@
       for (var r = 0; r < rainP.length; r++) {
         var p = rainP[r];
         p.y += p.vy * dt; p.r += p.vr * dt;
-        if (p.y > 1260 && S.rainT < 2.4) { p.y = LG.rand(-200, -40); p.x = LG.rand(40, 1040); }
+        if (p.y > 1260 && S.rainT < 4.2) { p.y = LG.rand(-200, -40); p.x = LG.rand(40, 1040); }
       }
     }
   }
@@ -887,7 +925,11 @@
       if (S.final && rem > 0 && rem <= 5 && Math.floor(rem) !== Math.floor(rem + dtw)) LG.sfx('countdown');
       if (rem <= 0) endRound('time');
       else if (S.endAt && S.roundT >= S.endAt) endRound('full');
-      else if (S.rainT >= 0) { S.rainT += dt; if (S.rainT > 3.4) endRound('rain'); }
+      else if (S.rainT >= 0) {
+        S.rainT += dt;
+        if (Math.random() < dt * 3) LG.sfx('coin');
+        if (S.rainT > 5.5) endRound('rain');
+      }
     } else if (S.phase === 'end') {
       S.endT += dt;
       if (S.endT > CFG.endCard) newRound();
@@ -920,7 +962,12 @@
   }
   function kidPose(k) {
     var P = framePose(k), t = wt + k.ph, st = k.state;
-    if (st === 'idle') {
+    if (st === 'idle' && S.rainT >= 0) {
+      // ikram yağmuru partisi: herkes zıplıyor, elinde ikram
+      P.hold = S.treat.id; P.hl = [-24, -96]; P.hr = [24, -100];
+      P.lift = Math.abs(Math.sin(t * 7)) * 22; P.rot = Math.sin(t * 3.5) * 0.1;
+      P.fl = [-12, -4]; P.fr = [12, -4];
+    } else if (st === 'idle') {
       if (k.stepT < 1) {
         var sw = Math.sin(k.stepT * Math.PI), leg = k.stepN % 2 ? 1 : -1;
         P.lift = sw * 13; P.rot = 0.05 * leg;
@@ -1021,6 +1068,7 @@
       if (!ok) continue;
       tagRects.push({ x: x, y: y, w: cv.width, h: cv.height });
       ctx.drawImage(cv, Math.round(x - cv.width / 2), Math.round(y - cv.height / 2));
+      if (k === leader && k.state === 'idle') ui.emoji(ctx, '👑', x, y - cv.height / 2 - 16 + Math.sin(LG.time * 5) * 3, 32);
       if (k.terlik > 0) {
         var bx = x + cv.width / 2 + 6;
         A.drawSprite(ctx, A.slipperSprite(34), bx + 14, y, -0.5, 0.9);
@@ -1062,7 +1110,7 @@
     var sc = b.t < 0.18 ? LG.ease.outBack(b.t / 0.18) : 1;
     ctx.save();
     ctx.translate(bx, by); ctx.scale(sc, sc); ctx.translate(-bx, -by);
-    A.bubble(ctx, bx, by, b.text, { size: 31, maxW: right ? Math.min(420, 1060 - bx) : Math.min(420, bx - 20), align: align, tx: hx + (right ? 30 : -30), ty: hy, alpha: a, fill: isRed() ? '#ffe3e3' : '#fff' });
+    A.bubble(ctx, bx, by, b.text, { size: b.size, maxW: right ? Math.min(420, 1060 - bx) : Math.min(420, bx - 20), align: align, tx: hx + (right ? 30 : -30), ty: hy, alpha: a, fill: isRed() ? '#ffe3e3' : '#fff' });
     ctx.restore();
   }
   function drawGuests(ctx) {
@@ -1160,7 +1208,7 @@
       ui.text(c, '🍯 Baklavacılar', B.w / 2, 26, { size: 32, stroke: false, color: '#fff3c4', maxWidth: B.w - 20 });
       c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 2;
       c.beginPath(); c.moveTo(22, 48); c.lineTo(B.w - 22, 50); c.stroke();
-      var rows = board.top(4);
+      var rows = board.top(3);
       if (!rows.length) {
         ui.text(c, 'Buzdolabına ilk', B.w / 2, 96, { size: 26, stroke: false, color: chalk.color });
         ui.text(c, 'varan buraya', B.w / 2, 128, { size: 26, stroke: false, color: chalk.color });
@@ -1285,6 +1333,27 @@
     ctx.restore();
   }
 
+  var bigGlowCv = null, vignCv = null;
+  function bigGlow() {
+    if (!bigGlowCv) {
+      bigGlowCv = document.createElement('canvas'); bigGlowCv.width = 1120; bigGlowCv.height = 600;
+      var g = bigGlowCv.getContext('2d');
+      var rg = g.createRadialGradient(560, 300, 40, 560, 300, 520);
+      rg.addColorStop(0, 'rgba(255,215,120,0.35)'); rg.addColorStop(1, 'rgba(255,215,120,0)');
+      g.fillStyle = rg; g.fillRect(0, 0, 1120, 600);
+    }
+    return bigGlowCv;
+  }
+  function vignette() {
+    if (!vignCv) {
+      vignCv = document.createElement('canvas'); vignCv.width = 270; vignCv.height = 480;   // çeyrek çözünürlük, büyütülerek çizilir
+      var g = vignCv.getContext('2d');
+      var vg = g.createRadialGradient(135, 225, 65, 135, 225, 225);
+      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+      g.fillStyle = vg; g.fillRect(0, 0, 270, 480);
+    }
+    return vignCv;
+  }
   function drawBig(ctx) {
     var b = big;
     if (!b) return;
@@ -1294,9 +1363,7 @@
     ctx.save();
     ctx.globalAlpha = Math.max(0, a);
     ctx.translate(cx, cy); ctx.scale(sc, sc);
-    var rg = ctx.createRadialGradient(0, 0, 40, 0, 0, 520);
-    rg.addColorStop(0, 'rgba(255,215,120,0.35)'); rg.addColorStop(1, 'rgba(255,215,120,0)');
-    ctx.fillStyle = rg; ctx.fillRect(-560, -300, 1120, 600);
+    ctx.drawImage(bigGlow(), -560, -300);
     ui.panel(ctx, -w / 2, -h / 2, w, h, { r: 40, fill: 'rgba(40,14,70,0.94)', border: b.color, lineWidth: 6 });
     var tx = -w / 2 + 36;
     if (b.user) { ui.avatar(ctx, b.user, -w / 2 + 92, 0, 62, { ring: b.color, ringWidth: 5 }); tx = -w / 2 + 176; }
@@ -1319,9 +1386,9 @@
     ctx.translate(540, 930); ctx.scale(sc, sc);
     ui.panel(ctx, -440, -150, 880, 300, { r: 44, fill: 'rgba(25,10,55,0.93)', border: '#ffd166', lineWidth: 6 });
     ui.text(ctx, S.round + '. TUR', 0, -104, { size: 40, color: '#b8ffdf' });
-    ctx.drawImage(A.treatSprite(S.treat.id, 120), -330, -70 + Math.sin(LG.time * 5) * 5);
-    ctx.drawImage(A.treatSprite(S.treat.id, 120), 206, -70 - Math.sin(LG.time * 5) * 5);
-    ui.text(ctx, S.treat.name + ' PEŞİNDE!', 0, -24, { size: 64, color: '#ffd166', maxWidth: 520 });
+    ctx.drawImage(A.treatSprite(S.treat.id, 110), -432, -96 + Math.sin(LG.time * 5) * 5);
+    ctx.drawImage(A.treatSprite(S.treat.id, 110), 311, -96 - Math.sin(LG.time * 5) * 5);
+    ui.text(ctx, S.treat.name + ' PEŞİNDE!', 0, -24, { size: 64, color: '#ffd166', maxWidth: 600 });
     ui.text(ctx, 'Buzdolabına ilk ' + CFG.maxWin + ' kişi ulaşsın 🏁', 0, 44, { size: 32, color: '#fff', maxWidth: 560 });
     ui.text(ctx, '“git” yaz → adım at · anne bakınca DUR!', 0, 100, { size: 30, color: '#ffb3c1', maxWidth: 760 });
     ctx.restore();
@@ -1416,11 +1483,13 @@
     drawMom(ctx);
     drawCat(ctx, true);
     // masadakiler (masanın arkasında)
-    for (var i = 0; i < S.winners.length; i++) if (S.winners[i].state === 'seated') drawKid(ctx, S.winners[i]);
+    for (var odd = 1; odd >= 0; odd--) {
+      for (var i = 0; i < S.winners.length; i++) if (S.winners[i].state === 'seated' && S.winners[i].seat % 2 === odd) drawKid(ctx, S.winners[i]);
+    }
     A.table(ctx);
     for (var w = 0; w < S.winners.length; w++) {
       var sk = S.winners[w];
-      if (sk.state === 'seated' && sk.rank <= 3) ui.emoji(ctx, ['🥇', '🥈', '🥉'][sk.rank - 1], sk.x, sk.y - 82, 24);
+      if (sk.state === 'seated' && sk.rank <= 3) ui.emoji(ctx, ['🥇', '🥈', '🥉'][sk.rank - 1], sk.x + 13, sk.y - 88 * sk.s - 16, 22);
     }
     drawGuests(ctx);
     drawFloorSlips(ctx);
@@ -1451,12 +1520,8 @@
     if (cam.z > 1.01) {
       var va = (cam.z - 1) / 0.14;
       ctx.save();
-      var vg = ctx.createRadialGradient(540, 900, 260, 540, 900, 900);
-      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,' + (0.55 * va) + ')');
-      ctx.fillStyle = vg; ctx.fillRect(0, 0, W, LG.H);
-      ctx.restore();
-      ctx.save(); ctx.globalAlpha = Math.min(1, va);
-      ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 232, W, 22); ctx.fillRect(0, 1186, W, 22);
+      ctx.globalAlpha = Math.min(1, va);
+      ctx.drawImage(vignette(), 0, 0, W, LG.H);
       ctx.restore();
       ui.text(ctx, '🎬 AĞIR ÇEKİM', 540, 1166, { size: 36, color: 'rgba(255,255,255,' + Math.min(1, va) + ')' });
     }

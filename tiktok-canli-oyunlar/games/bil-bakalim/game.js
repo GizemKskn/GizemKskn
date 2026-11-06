@@ -34,7 +34,8 @@
   var TOP = { y: 242, h: 86 };
   var CARD = { x: 60, y: 352, w: 960 };
   var MC_CARD_H = 268, W_CARD_H = 350;          // 352..620 / 352..702
-  var OPT = { x: 60, y: 638, w: 960, h: 94, gap: 18 }; // 638..1068
+  var OPT = { x: 60, y: 636, w: 960, h: 86, gap: 14 }; // 636..1022
+  var TICK = { x: 60, y: 1030, w: 960, h: 46 };        // son cevap verenlerin isimleri ..1076
   var SLOT_Y = 714, SLOT_H = 120;               // 714..834
   var WIN_Y = 846, WIN_H = 128;                 // 846..974
   var GUESS_Y = 986;                            // 986..1070
@@ -75,7 +76,8 @@
   // Renkli emoji glifleri fillStyle'ın saydamlığını miras alır → her zaman opak renkle çiz
   function emo(ctx, e, x, y, size, alpha) { ctx.fillStyle = '#000'; ui.emoji(ctx, e, x, y, size, alpha); }
   function trUpper(s) { return String(s).replace(/i/g, 'İ').replace(/ı/g, 'I').toUpperCase(); }
-  function compact(s) { return LG.cmd.norm(s).replace(/ /g, ''); }
+  function compact(s) { return LG.cmd.norm(s).replace(/[^a-z0-9]/g, ''); }
+  function tokens(s) { return LG.cmd.norm(s).replace(/[^a-z0-9 ]/g, ' ').split(' ').filter(Boolean); }
   function secs(t) { return (Math.round(t * 10) / 10).toFixed(1).replace('.', ',') + ' sn'; }
   function trunc(s, n) { var a = Array.from(String(s)); return a.length > n ? a.slice(0, n - 1).join('') + '…' : a.join(''); }
   var mctx = document.createElement('canvas').getContext('2d');
@@ -91,12 +93,16 @@
     return lines;
   }
   function fitWrap(text, maxW, sizes, maxLines) {
-    var r = null;
+    var r = null, fallback = null;
     for (var i = 0; i < sizes.length; i++) {
       r = { lines: wrap(text, sizes[i], maxW), size: sizes[i] };
-      if (r.lines.length <= maxLines) return r;
+      if (r.lines.length > maxLines) continue;
+      // tek başına kalan kısa son satırı (ör. '…"') sevmiyoruz: daha küçük boyutu dene
+      var lastShort = r.lines.length > 1 && Array.from(r.lines[r.lines.length - 1]).length < 6;
+      if (!lastShort) return r;
+      if (!fallback) fallback = r;
     }
-    return r;
+    return fallback || r;
   }
   function txt(ctx, s, x, y, size, color, o) {
     o = o || {};
@@ -143,6 +149,8 @@
   var sparkles = [], glyphs = [];
   var introCount = -1;
   var hintAnchor = 0;
+  var spotLast = new Map(), capThanked = new Set();
+  var DECOYS = {};                 // kelime/plaka: "toplu tahmin" (rize trabzon ordu…) yakalamak için
 
   // ---------------------------------------------------------------------------
   // Soru üretimi
@@ -150,43 +158,45 @@
   function isNumeric(s) { return /^[%]?-?\d+([.,]\d+)?( ?(°C|km|sayı))?$/.test(String(s).trim()); }
   function numOf(s) { var m = String(s).match(/-?\d+([.,]\d+)?/); return m ? parseFloat(m[0].replace(',', '.')) : NaN; }
 
-  function makeQuestion(mode, num) {
+  function makeQuestion(mode, num, forceIdx) {
+    function pick(bag) { return forceIdx != null ? forceIdx : bags[bag].next(); }
     var q = {
       mode: mode, num: num, t: 0, dur: MODES[mode].dur, baseDur: MODES[mode].dur, left: MODES[mode].dur,
       mult: 1, double: null, answers: new Map(), total: 0, recent: [],
       solved: new Set(), guessers: new Map(), winners: [], late: 0, guesses: [],
       removedBySuper: 0, superLetters: 0, revealedAt: null, ring: 0, closing: false, born: now(),
+      tick: [], tickQ: [], lastTick: -9, guessQ: [], lastGuess: -9,
     };
     if (mode === 'mc') {
-      var it = D.mc[bags.mc.next()];
+      var it = D.mc[pick('mc')];
       q.cat = it[0]; q.text = it[1];
       var opts = [{ text: it[2], correct: true }, { text: it[3] }, { text: it[4] }, { text: it[5] }];
       if (opts.every(function (o) { return isNumeric(o.text); })) opts.sort(function (a, b) { return numOf(a.text) - numOf(b.text); });
       else LG.shuffle(opts);
       q.opts = opts.map(function (o) {
-        return { text: o.text, correct: !!o.correct, norm: LG.cmd.norm(o.text), num: numOf(o.text), votes: 0, shown: 0, voters: [], removed: false, remT: 0, pulse: 0 };
+        return { text: o.text, correct: !!o.correct, norm: tokens(o.text).join(' '), num: numOf(o.text), votes: 0, shown: 0, voters: [], removed: false, remT: 0, pulse: 0 };
       });
       for (var i = 0; i < 4; i++) if (q.opts[i].correct) q.correctIdx = i;
-      var f = fitWrap(q.text, CARD.w - 240, [60, 56, 52], 2);
+      var f = fitWrap(q.text, CARD.w - 240, [60, 56, 52, 48], 2);
       if (f.lines.length > 2) f = fitWrap(q.text, CARD.w - 240, [46, 42, 38, 34], 3);
       q.lines = f.lines; q.size = f.size;
     } else {
       if (mode === 'word') {
-        var w = D.word[bags.word.next()];
+        var w = D.word[pick('word')];
         q.cat = w[0]; q.answer = w[1];
         q.accept = [compact(w[1])].concat(((D.wordAlts || {})[w[1]] || []).map(compact));
         q.title = 'Harfleri sırala, kelimeyi bul!';
       } else if (mode === 'emoji') {
-        var e = D.emoji[bags.emoji.next()];
+        var e = D.emoji[pick('emoji')];
         q.emojis = e[0]; q.answer = e[1]; q.cat = e[2];
         q.accept = [compact(e[1])].concat((e[3] || []).map(compact));
         q.title = 'Bu emojiler neyi anlatıyor?';
       } else {
-        var p = D.plates[bags.plate.next()];
+        var p = D.plates[pick('plate')];
         q.code = p[0]; q.answer = p[1]; q.cat = 'Plaka';
         q.codeStr = (p[0] < 10 ? '0' : '') + p[0];
         q.accept = [compact(p[1])].concat((p[2] || []).map(compact));
-        q.title = LG.pick(['Hangi ilin plakası ' + q.codeStr + '?', q.codeStr + ' hangi ilin plakası?', 'Plaka kodu ' + q.codeStr + ' olan il hangisi?']);
+        q.title = LG.pick(['Hangi ilin plakası ' + q.codeStr + '?', q.codeStr + ' hangi il?', 'Plaka kodu ' + q.codeStr + ' olan il hangisi?']);
       }
       q.letters = Array.from(trUpper(q.answer));
       q.rev = q.letters.map(function (ch) { return ch === ' ' ? -1 : 0; });  // -1 boşluk, 0 gizli, >0 açılma zamanı
@@ -273,7 +283,7 @@
     applyMult(Q);
     if (pendingDouble) {
       Q.double = pendingDouble; pendingDouble = null; applyMult(Q);
-      pushBanner({ icon: '⚡', title: 'ÇİFTE PUAN TURU!', sub: Q.double.name + ' sayesinde bu soru herkese x' + Q.mult + ' 💖', col: '#ffc233', user: Q.double, dur: 2.8 });
+      pushBanner({ icon: '⚡', title: 'ÇİFTE PUAN TURU!', sub: Q.double.name + ' sayesinde bu soru herkese x' + Q.mult + ' 💖', col: '#ffc233', user: Q.double, dur: 2.8, prio: 2 });
       LG.sfx('fanfare');
       ui.burst(W / 2, CARD.y + 40, { count: 70, speed: 800 });
     }
@@ -282,7 +292,11 @@
     setPhase('intro');
     hintAnchor = now();
     LG.sfx('whoosh');
-    if (qNum === Q_PER_ROUND) pushFeed('🏁 Final sorusu! Puanlar x' + Q.mult, { icon: '🏁', col: '#ffc233', prio: 1 });
+    if (qNum === Q_PER_ROUND) {
+      pushBanner({ icon: '🏁', title: 'FİNAL SORUSU!', sub: 'Puanlar x' + Q.mult + ' — sıralama son anda değişebilir!', col: '#ffc233', dur: 2.8, prio: 2 });
+      LG.sfx('levelup');
+      ui.burst(W / 2, CARD.y + 20, { count: 50, speed: 700, colors: ['#ffc233', '#ff7a1c', '#ffffff'] });
+    }
   }
   function applyMult(q) { q.mult = 1 + (q.num === Q_PER_ROUND ? 1 : 0) + (q.double ? 1 : 0); }
 
@@ -305,7 +319,7 @@
       var n = removeWrong(2);
       if (n > 0) {
         joker.armed = false; joker.v = 0.08; joker.shown = 0.08;
-        joker.target = Math.min(4000, Math.round(joker.target * 1.3));
+        joker.target = Math.min(6000, Math.round(joker.target * 1.45)); // kalabalık yayında her soru kolaylaşmasın
         Q.half = true;
         pushBanner({ icon: '🃏', title: 'YARI YARIYA!', sub: 'Beğenileriniz sayesinde iki yanlış şık gitti ❤️', col: '#ff4d6d', dur: 2.6 });
         LG.sfx('zap');
@@ -355,6 +369,9 @@
       correct.sort(function (x, y) { return x.t - y.t; });
       Q.correct = correct;
       Q.first = correct[0] || null;
+      // isim şeridi: artık en hızlı doğru bilenleri gösterir
+      Q.tickQ = [];
+      Q.tick = correct.slice(0, 10).map(function (a, i) { return { user: a.user, opt: ci, ok: true, at: now() + i * 0.06, x: -1 }; });
       var oy = OPT.y + ci * (OPT.h + OPT.gap) + OPT.h / 2;
       if (correct.length) {
         LG.sfx('correct'); LG.sfx('clap');
@@ -440,9 +457,19 @@
     for (var i = 0; i < banners.length; i++) {
       if (b.user && banners[i].user === b.user && banners[i].title === b.title) { banners[i].combo = (banners[i].combo || 1) + 1; return; }
     }
-    if (banners.length >= 4) banners.shift();
+    b.prio = b.prio || 1;
+    if (banners.length >= 4) {
+      // kuyruk doluysa en düşük öncelikli en eski afişi at (büyük hediye kutlaması asla kaybolmasın)
+      var lo = -1;
+      for (var j = 0; j < banners.length; j++) if (lo < 0 || banners[j].prio < banners[lo].prio) lo = j;
+      if (banners[lo].prio > b.prio) return;
+      banners.splice(lo, 1);
+    }
     b.dur = b.dur || 2.6;
-    banners.push(b);
+    // yüksek öncelikli afiş sıranın önüne geçer
+    var at = banners.length;
+    while (at > 0 && banners[at - 1].prio < b.prio) at--;
+    banners.splice(at, 0, b);
   }
 
   // ---------------------------------------------------------------------------
@@ -459,21 +486,17 @@
     else answerWord(u, e);
   });
 
+  var LETTERS = ['a', 'b', 'c', 'd'];
   function pickChoice(e) {
-    var idx = LG.cmd.choice(e.raw, ['a', 'b', 'c', 'd']);
-    var n = e.norm;
-    if (idx < 0) {
-      // "bence b", "cevap c" gibi kısa yazımlar
-      var toks = n.split(' ');
-      if (toks.length <= 4) {
-        var found = -1;
-        for (var i = 0; i < toks.length; i++) {
-          var k = ['a', 'b', 'c', 'd'].indexOf(toks[i]);
-          if (k >= 0) { if (found >= 0 && found !== k) { found = -1; break; } found = k; }
-        }
-        idx = found;
+    var toks = tokens(e.raw), n = toks.join(' ');
+    var idx = -1;
+    if (toks.length <= 4) {
+      // "b", "B!", "bence b", "c şıkkı", "cevap: d" — iki farklı harf ("a b") geçersiz
+      for (var i = 0; i < toks.length; i++) {
+        var k = LETTERS.indexOf(toks[i]);
+        if (k >= 0) { if (idx >= 0 && idx !== k) return -1; idx = k; }
       }
-    }
+    } else idx = LETTERS.indexOf(toks[0]); // uzun yorumda yalnız ilk kelime
     if (idx >= 0) return idx;
     // şıkkın kendisi yazıldıysa
     var hit = -1;
@@ -506,19 +529,38 @@
     Q.recent.unshift(u); if (Q.recent.length > 3) Q.recent.length = 3;
     Q.lastVoteT = now();
     roundPlayers.add(u.id);
-    LG.sfx('pop');
+    // isim şeridine sıraya koy (kalabalıkta en yenileri tutulur)
+    Q.tickQ.push({ user: u, opt: idx, ok: false });
+    if (Q.tickQ.length > 8) Q.tickQ.shift();
+    LG.sfx('pop', { gap: 110 });
   }
 
+  // Tek yorumda birden çok aday cevap ("rize trabzon ordu giresun") → toplu tahmin, kabul edilmez
+  function isShotgun(toks) {
+    var set = DECOYS[Q.mode];
+    if (!set) return false;
+    for (var i = 0; i < toks.length; i++) {
+      if (set.has(toks[i]) && Q.accept.indexOf(toks[i]) < 0) return true;
+    }
+    return false;
+  }
   function answerWord(u, e) {
     if (Q.solved.has(u.id)) return;
     var c = compact(e.raw);
     if (!c) return;
     Q.guessers.set(u.id, u);
     roundPlayers.add(u.id);
+    var toks = tokens(e.raw);
     var ok = false;
-    for (var i = 0; i < Q.accept.length; i++) {
-      var a = Q.accept[i];
-      if (a && (c === a || (a.length >= 4 && c.indexOf(a) >= 0))) { ok = true; break; }
+    if (!isShotgun(toks)) {
+      var shortMsg = toks.length <= Q.nWords + 2;
+      for (var i = 0; i < Q.accept.length && !ok; i++) {
+        var a = Q.accept[i];
+        if (!a) continue;
+        // "kirpidir", "61 trabzon", "65 van", "cevap: kirpi" kabul; uzun cümle içinde geçmesi kabul değil
+        if (c === a || (a.length >= 4 && shortMsg && c.indexOf(a) >= 0)) ok = true;
+        else if (shortMsg) for (var ti = 0; ti < toks.length; ti++) if (toks[ti] === a) { ok = true; break; }
+      }
     }
     if (ok) {
       Q.solved.add(u.id);
@@ -542,9 +584,34 @@
       addGuess(u, e.text, false);
     }
   }
+  // Tahmin kartları: sakin yayında anında, kalabalıkta saniyede ~6 tane (her isim okunabilsin)
   function addGuess(u, text, ok) {
-    Q.guesses.unshift({ user: u, text: text ? trunc(text.trim(), 13) : '', ok: ok, at: now() });
-    if (Q.guesses.length > 6) Q.guesses.length = 6;
+    var gq = { user: u, text: text ? trunc(text.trim(), 13) : '', ok: ok };
+    if (ok) {
+      // doğru bilenler öne
+      var k = 0; while (k < Q.guessQ.length && Q.guessQ[k].ok) k++;
+      Q.guessQ.splice(k, 0, gq);
+    } else Q.guessQ.push(gq);
+    if (Q.guessQ.length > 10) {
+      var drop = -1;
+      for (var j = 0; j < Q.guessQ.length; j++) if (!Q.guessQ[j].ok) { drop = j; break; }
+      Q.guessQ.splice(drop >= 0 ? drop : 0, 1);
+    }
+  }
+  function flushQueues() {
+    var t = now();
+    if (Q.guessQ.length && t - Q.lastGuess >= 0.16) {
+      var gq = Q.guessQ.shift(); gq.at = t;
+      Q.guesses.unshift(gq); if (Q.guesses.length > 6) Q.guesses.length = 6;
+      Q.lastGuess = t;
+    }
+    if (Q.tickQ.length && t - Q.lastTick >= 0.14 && Q.revealedAt == null) {
+      var tk = Q.tickQ.pop(); // en yenisi
+      if (Q.tickQ.length > 4) Q.tickQ.splice(0, Q.tickQ.length - 4);
+      tk.at = t; tk.x = -1;
+      Q.tick.unshift(tk); if (Q.tick.length > 9) Q.tick.length = 9;
+      Q.lastTick = t;
+    }
   }
 
   function armJoker(byHost) {
@@ -560,14 +627,31 @@
       if (joker.v >= 1) armJoker(false);
     }
   });
+  // Büyük kutlama izni (ortak spotlightAllowed bu hediyeyi de jetona saydığı için tek seferde
+  // 5000+ jetonluk hediye hiç kutlanmıyordu; burada hediyeden ÖNCEKİ toplam kullanılır).
+  function bigAllowed(u, g) {
+    if (g.tier < 3) return true;
+    if (LG.spotlightMuted && LG.spotlightMuted.has(u.id)) return false;
+    var cap = LG.config.softcap;
+    if (cap > 0 && u.coins - g.total > cap) {
+      if (!capThanked.has(u.id)) { capThanked.add(u.id); pushFeed(u.name + ', efsanesin! Çok teşekkürler 💖', { icon: '👑', col: '#ffd166', prio: 1 }); }
+      return false;
+    }
+    var n = performance.now() / 1000, last = spotLast.get(u.id);
+    if (last != null && n - last < (LG.config.spotlightCooldown || 25)) return false;
+    spotLast.set(u.id, n);
+    return true;
+  }
+  function thanksFeed(u, g, em, extra) {
+    pushFeed(u.name + ', ' + g.name + (g.count > 1 ? ' x' + g.count : '') + ' için teşekkürler! 💖' + (extra || ''), { icon: em, col: '#ffd6e0', prio: 1, key: 'thx', first: u.name,
+      mk: function (f) { return f.first + ' ve ' + (f.count - 1) + ' kişiye teşekkürler! 💖'; } });
+  }
   LG.on('gift', function (e) {
     var g = e.gift, u = e.user;
     if (!u) return;
     var tier = g.tier, em = LG.giftEmoji(g);
-    var cnt = g.count > 1 ? ' x' + g.count : '';
     if (tier <= 1) {
-      pushFeed(u.name + ', ' + g.name + cnt + ' için teşekkürler!', { icon: em, col: '#ffd6e0', prio: 1, key: 'thx', first: u.name,
-        mk: function (f) { return f.first + ' ve ' + (f.count - 1) + ' kişiye teşekkürler! 💖'; } });
+      thanksFeed(u, g, em);
       for (var k = 0; k < Math.min(3, g.count); k++) ui.float('❤', LG.rand(160, 920), LG.rand(1020, 1110), { color: '#ff4d6d', size: 50, vy: -170, life: 1.8 });
       LG.sfx('heart');
       return;
@@ -575,28 +659,31 @@
     var res = applySuper();
     var dbl = false;
     if (tier >= 4 && !pendingDouble) { pendingDouble = u; dbl = true; }
-    var big = tier >= 3 ? ui.spotlightAllowed(u, tier) : true;
-    var subSuper = res === 'mc' ? 'Herkes için bir yanlış şık silindi ✂️' : res === 'letter' ? 'Herkese bir harf açıldı 🔤' : res === 'pending' ? 'Sıradaki soruda herkese süper joker ⚡' : 'Bu sorunun süper jokeri zaten açıldı 💖';
-    if (big) {
-      if (tier >= 4) {
-        pushBanner({ icon: em, user: u, tier: tier, col: '#ffc233', dur: tier >= 5 ? 3.6 : 3,
-          title: dbl ? 'ÇİFTE PUAN TURU! 🎉' : u.name + ', çok teşekkürler! 💖',
-          sub: dbl ? u.name + ' sayesinde sıradaki soru herkese x2' : (res ? subSuper : 'Çifte puan zaten sırada ⚡ Harikasın!') });
-        if (dbl && res) pushFeed('Süper joker: ' + subSuper, { icon: '⚡', col: '#9be7ff', prio: 1 });
-      } else if (res) {
-        pushBanner({ icon: em, user: u, tier: tier, col: '#38b6ff', title: 'SÜPER JOKER! ⚡ ' + u.name, sub: subSuper });
-      } else {
-        pushBanner({ icon: em, user: u, tier: tier, col: '#38b6ff', title: u.name + ', teşekkürler! 💖', sub: subSuper });
-      }
+    var big = bigAllowed(u, g);
+    var subSuper = res === 'mc' ? 'Herkes için bir yanlış şık silindi ✂️' : res === 'letter' ? 'Herkese bir harf açıldı 🔤' : res === 'pending' ? 'Sıradaki soruda herkese süper joker ⚡' : '';
+    var shortRes = res === 'mc' ? ' ✂️ 1 şık gitti' : res === 'letter' ? ' 🔤 1 harf açıldı' : res === 'pending' ? ' ⚡ sıradaki soruya joker' : '';
+    if (tier >= 4 && big) {
+      // büyük hediye: büyük teşekkür afişi (5+ kademede "kahraman" afişi)
+      pushBanner({ icon: em, user: u, tier: tier, col: '#ffc233', dur: tier >= 5 ? 4 : 3, prio: tier >= 5 ? 3 : 2, hero: tier >= 5,
+        title: tier >= 5 ? u.name + ' · ' + g.name + (g.count > 1 ? ' x' + g.count : '') : (dbl ? 'ÇİFTE PUAN TURU! 🎉' : u.name + ', çok teşekkürler! 💖'),
+        sub: tier >= 5 ? (dbl ? 'MUHTEŞEM! Sıradaki soru herkese x2 🎉' : 'MUHTEŞEMSİN! Çok teşekkürler 💖')
+          : dbl ? u.name + ' sayesinde sıradaki soru herkese x2' : (subSuper || 'Çifte puan zaten sırada ⚡ Harikasın!') });
+      if (res) pushFeed('Süper joker: ' + subSuper, { icon: '⚡', col: '#9be7ff', prio: 1 });
+    } else if (res && big) {
+      // joker gerçekten bir şey yaptıysa (soru başına 1 kez) mavi afiş
+      pushBanner({ icon: em, user: u, tier: tier, col: '#38b6ff', title: 'SÜPER JOKER! ⚡ ' + u.name, sub: subSuper, prio: 1 });
     } else {
-      pushFeed(u.name + ' · ' + g.name + cnt + ' — teşekkürler!' + (res ? ' ' + subSuper : ''), { icon: em, col: '#ffd166', prio: 1 });
+      // etkisi olmayan küçük hediyeler üst şeridi kapatmasın: ipucu şeridinde toplu teşekkür
+      thanksFeed(u, g, em, shortRes ? ' ·' + shortRes : '');
+      if (dbl) pushFeed('Çifte puan sırada: sıradaki soru herkese x2 ⚡', { icon: '⚡', col: '#ffc233', prio: 1 });
     }
     if (tier >= 5 && big) {
-      LG.sfx('mega'); ui.rain({ count: tier >= 6 ? 240 : 150 }); ui.flash('#ffffff', 0.35); ui.shake(16, 0.6);
+      LG.sfx('mega'); ui.rain({ count: tier >= 6 ? 240 : 150 }); ui.flash('#fff3b0', 0.35); ui.shake(16, 0.6);
+      ui.burst(W / 2, TOP.y + 70, { count: tier >= 6 ? 26 : 16, speed: 900, shape: 'emoji', emoji: em, size: 22, up: 300, life: 1.8 });
     } else if (tier >= 4) {
       LG.sfx('fanfare'); ui.burst(W / 2, TOP.y + 60, { count: 90, speed: 900 });
     } else {
-      LG.sfx('zap'); ui.burst(W / 2, TOP.y + 60, { count: 30, speed: 600, colors: ['#38b6ff', '#9be7ff', '#ffffff'] });
+      LG.sfx(res ? 'zap' : 'coin'); ui.burst(W / 2, TOP.y + 60, { count: res ? 30 : 12, speed: 600, colors: ['#38b6ff', '#9be7ff', '#ffffff'] });
     }
   });
   function applySuper() {
@@ -728,6 +815,8 @@
         break;
     }
     if (Q) {
+      flushQueues();
+      if (Q.mode === 'mc') updateTicker(dt);
       Q.ring = Math.max(0, Q.ring - dt * 3);
       if (Q.mode === 'mc') {
         for (var i = 0; i < 4; i++) {
@@ -841,19 +930,20 @@
   }
   function buildLogo() {
     var c = document.createElement('canvas');
-    c.width = 470; c.height = 110;
+    c.width = 420; c.height = 110;
     var b = c.getContext('2d');
     b.textAlign = 'left'; b.textBaseline = 'middle';
-    b.font = ui.font(64, 900);
+    b.font = ui.font(58, 900);
     var str = 'Bil Bakalım!';
     var tw = b.measureText(str).width;
-    var x0 = (470 - tw - 70) / 2;
+    var x0 = (420 - tw - 62) / 2;
     b.lineJoin = 'round';
     b.lineWidth = 14; b.strokeStyle = '#1a0b46'; b.strokeText(str, x0, 58);
     var g = b.createLinearGradient(0, 22, 0, 90);
     g.addColorStop(0, '#fff3b0'); g.addColorStop(0.5, '#ffc233'); g.addColorStop(1, '#ff7a1c');
     b.fillStyle = g; b.fillText(str, x0, 56);
-    b.font = '60px ' + ui.EMOJI_FONT;
+    b.font = '52px ' + ui.EMOJI_FONT;
+    b.fillStyle = '#000';
     b.fillText('🧠', x0 + tw + 8, 58);
     return c;
   }
@@ -962,8 +1052,9 @@
     if (back) { g.addColorStop(0, '#f2fff8'); g.addColorStop(1, '#d4f7e6'); }
     else { g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#ece6ff'); }
     ctx.fillStyle = g; ctx.fill();
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = back ? '#1fd19a' : MODES[Q.mode].col;
+    var hurry = phase === 'ask' && Q.left <= 5 && Math.sin(t * 12) > 0;
+    ctx.lineWidth = hurry ? 9 : 6;
+    ctx.strokeStyle = back ? '#1fd19a' : hurry ? '#ff4d6d' : MODES[Q.mode].col;
     ctx.stroke();
     if (!back) drawFront(ctx, x, y, w, h, t);
     else drawBack(ctx, x, y, w, h, t);
@@ -975,7 +1066,7 @@
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.stroke();
     ui.text(ctx, Q.chip, chipX + Q.chipW / 2, chipY + 25, { size: 26, color: '#fff', strokeWidth: 4, strokeColor: 'rgba(0,0,0,0.35)' });
     if (Q.mult > 1) {
-      var mtxt = Q.double ? '⚡ ÇİFTE PUAN x' + Q.mult : '🏁 FİNAL x' + Q.mult;
+      var mtxt = Q.double && Q.num === Q_PER_ROUND ? '🏁⚡ FİNAL + ÇİFTE x' + Q.mult : Q.double ? '⚡ ÇİFTE PUAN x' + Q.mult : '🏁 FİNAL x' + Q.mult;
       var mw = measure(mtxt, 26, 900) + 40;
       var mx = chipX + Q.chipW + 14;
       var pul = 1 + Math.sin(t * 7) * 0.04;
@@ -1035,7 +1126,6 @@
       ctx.restore();
       txt(ctx, '💬 Yaz: a · b · c · d', x + 40, y + h - 32, 27, '#5b45c9', { align: 'left' });
       var info = '🗳️ ' + LG.fmt(Q.total) + ' cevap';
-      if (Q.recent.length && now() - (Q.lastVoteT || 0) < 2.5) info += '  ·  son: ' + Q.recent[0].name;
       txt(ctx, info, x + w - 40, y + h - 32, 27, '#5b45c9', { align: 'right', maxWidth: w - 400 });
       return;
     }
@@ -1144,8 +1234,8 @@
       for (var j = 0; j < ne; j++) emo(ctx, Q.emojis[j], cx + (j - (ne - 1) / 2) * 84, y + 116, 66);
       txt(ctx, ans, cx, y + 204, 70, INK, { maxWidth: w - 80 });
     } else if (Q.mode === 'plate') {
-      drawPlate(ctx, cx, y + 128, 330, 76, Q.codeStr, false, t);
-      txt(ctx, ans, cx, y + 214, 76, INK, { maxWidth: w - 80 });
+      drawPlate(ctx, cx, y + 116, 300, 66, Q.codeStr, false, t);
+      txt(ctx, ans, cx, y + 212, 74, INK, { maxWidth: w - 80 });
     } else {
       txt(ctx, ans, cx, y + 140, 104, INK, { maxWidth: w - 80 });
       txt(ctx, ((D.catEmoji || {})[Q.cat] || '') + ' ' + Q.cat, cx, y + 214, 36, '#7a5a2a');
@@ -1216,7 +1306,7 @@
         var pct = Q.total ? Math.round(o.votes / Q.total * 100) : 0;
         ui.text(ctx, '%' + pct, x + w - 28, y + h / 2 + 2, { size: 38, align: 'right', color: isC ? '#b6ffe3' : '#ffe08a' });
         // son oy verenlerin minik avatarları
-        var ax = x + w - 132;
+        var ax = x + w - 150;
         for (var v = o.voters.length - 1, n = 0; v >= 0 && n < 5; v--, n++) {
           ui.avatar(ctx, o.voters[v], ax - n * 26, y + h / 2, 19, { ringWidth: 3, ring: OPT_COL[i] });
         }
@@ -1234,6 +1324,52 @@
         else ui.text(ctx, '✂️ ELENDİ', x + w - 40, y + h / 2 + 2, { size: 32, align: 'right', color: '#ffb3c1' });
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // İsim şeridi (çoktan seçmeli): cevap veren herkesin adı ~1 sn içinde görünür;
+  // cevap gösteriminde en hızlı doğru bilenler sıralanır.
+  // ---------------------------------------------------------------------------
+  function updateTicker(dt) {
+    var x = TICK.x + 10 + (Q.revealedAt != null && Q.tick.length ? 160 : 0);
+    for (var i = 0; i < Q.tick.length; i++) {
+      var tk = Q.tick[i];
+      if (!tk.w) tk.w = ui.nameTag(tk.user, 24).width + 42;
+      if (tk.x < 0) tk.x = x - 50;
+      tk.x += (x - tk.x) * Math.min(1, dt * 12);
+      x += tk.w + 8;
+    }
+  }
+  function drawTicker(ctx, t) {
+    var y = TICK.y, h = TICK.h, rv = Q.revealedAt != null;
+    ui.panel(ctx, TICK.x, y, TICK.w, h, { r: h / 2, fill: 'rgba(10,6,40,0.62)', border: rv ? 'rgba(31,209,154,0.6)' : 'rgba(255,255,255,0.16)', lineWidth: 3 });
+    if (!Q.tick.length) {
+      var msg = rv ? '😅 Bu soruyu bilen olmadı — sıradakinde sen bil!' : '💬 a, b, c ya da d yaz — adın burada görünsün!';
+      ui.text(ctx, msg, TICK.x + TICK.w / 2, y + h / 2 + 1, { size: 27, color: 'rgba(255,255,255,0.85)', maxWidth: TICK.w - 40, strokeWidth: 4 });
+      return;
+    }
+    ctx.save();
+    ui.roundRect(ctx, TICK.x, y, TICK.w, h, h / 2); ctx.clip();
+    if (rv) ui.text(ctx, '✅ Bilenler', TICK.x + 86, y + h / 2 + 1, { size: 27, color: '#7dffcf', strokeWidth: 4 });
+    for (var i = 0; i < Q.tick.length; i++) {
+      var tk = Q.tick[i];
+      if (tk.x > TICK.x + TICK.w || !tk.w) break;
+      var age = now() - tk.at;
+      if (age < 0) continue;
+      var sc = 0.6 + 0.4 * ease.outBack(clamp(age / 0.3, 0, 1));
+      var cw = tk.w, ch = 36, cx = tk.x, cy = y + h / 2;
+      var col = tk.ok ? '#1fd19a' : OPT_COL[tk.opt];
+      ctx.save();
+      ctx.globalAlpha = clamp(age / 0.18, 0, 1);
+      ctx.translate(cx + cw / 2, cy); ctx.scale(sc, sc); ctx.translate(-(cx + cw / 2), -cy);
+      ui.roundRect(ctx, cx, cy - ch / 2, cw, ch, ch / 2);
+      ctx.fillStyle = tk.ok ? 'rgba(8,70,50,0.96)' : 'rgba(24,12,66,0.96)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = col; ctx.stroke();
+      ui.avatar(ctx, tk.user, cx + 19, cy, 14, { ringWidth: 2, ring: col });
+      ui.drawNameTag(ctx, tk.user, cx + 36 + (cw - 42) / 2, cy + 1, 24);
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   // ---------------------------------------------------------------------------
@@ -1390,34 +1526,55 @@
 
   function drawBanner(ctx, t) {
     if (!banner) return;
-    var b = banner, d = b.dur;
+    var b = banner, d = b.dur, hero = !!b.hero;
     var inP = ease.outBack(clamp(b.t / 0.35, 0, 1));
-    var outP = clamp((d - b.t) / 0.3, 0, 1);
-    var y = TOP.y - 4 - (1 - inP) * 130 - (1 - outP) * 40;
-    var x = 40, w = 1000, h = 88;
+    var outP = clamp((d - b.t) / 0.28, 0, 1);
+    var x = 40, w = 1000, h = hero ? 128 : 88;
+    var y = TOP.y - 4 - (1 - inP) * (h + 60) - (1 - ease.outCubic(outP)) * (h + 70);
     ctx.save();
-    ctx.globalAlpha = Math.min(1, outP * 1.2);
+    ctx.globalAlpha = clamp(outP * 3, 0, 1);
+    if (hero) {
+      // altın ışık huzmeleri
+      ctx.save();
+      ctx.translate(W / 2, y + h / 2);
+      ctx.rotate(t * 0.5);
+      ctx.fillStyle = 'rgba(255,215,90,0.16)';
+      for (var r = 0; r < 12; r++) {
+        ctx.rotate(TAU / 12);
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-60, -620); ctx.lineTo(60, -620); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
     ui.roundRect(ctx, x, y + 8, w, h, 30); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill();
     ui.roundRect(ctx, x, y, w, h, 30);
     var g = ctx.createLinearGradient(x, 0, x + w, 0);
-    g.addColorStop(0, '#2a0f64'); g.addColorStop(0.5, '#3b1590'); g.addColorStop(1, '#2a0f64');
+    if (hero) { g.addColorStop(0, '#4a1a00'); g.addColorStop(0.5, '#8a4b00'); g.addColorStop(1, '#4a1a00'); }
+    else { g.addColorStop(0, '#2a0f64'); g.addColorStop(0.5, '#3b1590'); g.addColorStop(1, '#2a0f64'); }
     ctx.fillStyle = g; ctx.fill();
-    ctx.lineWidth = 6; ctx.strokeStyle = b.col; ctx.stroke();
+    ctx.lineWidth = hero ? 8 : 6; ctx.strokeStyle = hero ? 'hsl(' + (40 + Math.sin(t * 6) * 10) + ',100%,' + (60 + Math.sin(t * 9) * 10) + '%)' : b.col; ctx.stroke();
     // parıltı
     ctx.save(); ui.roundRect(ctx, x, y, w, h, 30); ctx.clip();
     var shx = x - 200 + ((b.t * 900) % (w + 400));
     var sg = ctx.createLinearGradient(shx - 80, 0, shx + 80, 0);
-    sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.22)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+    sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,' + (hero ? 0.32 : 0.22) + ')'); sg.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = sg; ctx.fillRect(x, y, w, h);
     ctx.restore();
-    var lx = x + 58;
-    if (b.user) ui.avatar(ctx, b.user, lx, y + h / 2, 36, { ring: b.col, ringWidth: 5 });
+    var ar = hero ? 50 : 36;
+    var lx = x + ar + 22;
+    if (b.user) ui.avatar(ctx, b.user, lx, y + h / 2, ar, { ring: hero ? '#ffd166' : b.col, ringWidth: hero ? 6 : 5 });
     var bob = Math.sin(t * 8) * 4;
-    emo(ctx, b.icon || '🎉', b.user ? x + w - 56 : lx, y + h / 2 + bob, 54);
-    var tx0 = b.user ? x + 112 : x + 104;
+    var es = hero ? 84 + Math.sin(t * 5) * 6 : 54;
+    emo(ctx, b.icon || '🎉', b.user ? x + w - (hero ? 72 : 56) : lx, y + h / 2 + bob, es);
+    var tx0 = b.user ? x + ar * 2 + 40 : x + 104;
     var title = b.title + (b.combo > 1 ? ' x' + b.combo : '');
-    ui.text(ctx, title, tx0, y + 30, { size: 35, align: 'left', color: b.col, maxWidth: w - (tx0 - x) - 100 });
-    ui.text(ctx, b.sub, tx0, y + 65, { size: 28, align: 'left', color: '#fff', maxWidth: w - (tx0 - x) - 100 });
+    var mw = w - (tx0 - x) - (hero ? 140 : 100);
+    if (hero) {
+      ui.text(ctx, title, tx0, y + 44, { size: 44, align: 'left', color: '#fff3b0', maxWidth: mw, strokeWidth: 7 });
+      ui.text(ctx, b.sub, tx0, y + 92, { size: 34, align: 'left', color: '#ffffff', maxWidth: mw });
+    } else {
+      ui.text(ctx, title, tx0, y + 30, { size: 35, align: 'left', color: b.col, maxWidth: mw });
+      ui.text(ctx, b.sub, tx0, y + 65, { size: 28, align: 'left', color: '#fff', maxWidth: mw });
+    }
     ctx.restore();
   }
 
@@ -1560,7 +1717,7 @@
       drawHint(ctx, HINT.y);
       drawBoard(ctx, t);
     } else if (Q) {
-      if (Q.mode === 'mc') drawOptions(ctx, t);
+      if (Q.mode === 'mc') { drawOptions(ctx, t); drawTicker(ctx, t); }
       else { drawSlots(ctx, t); drawWinners(ctx, t); drawGuesses(ctx); }
       drawCard(ctx, t);
       drawHint(ctx, HINT.y);
@@ -1568,6 +1725,7 @@
     }
     drawBanner(ctx, t);
     ctx.restore();
+    ctx.fillStyle = '#000'; // ortak katmandaki emoji parçacıkları saydam dolguyu miras almasın
   }
 
   // Test/geliştirme kancası (yayında etkisi yok)
@@ -1579,6 +1737,15 @@
     next: nextQuestion,
     toQuestion: function (n) { qNum = n - 1; nextQuestion(); },
     newRound: function () { startRound(round + 1); },
+    // forceQ('plate', 65) → 65 plakalı il sorusu; forceQ('emoji', 3) → 3. emoji bilmece
+    forceQ: function (mode, n) {
+      Q = makeQuestion(mode, qNum || 1, mode === 'plate' ? n - 1 : n); applyMult(Q); setPhase('ask');
+    },
+    tryAnswer: function (user, text) {
+      LG.emit({ type: 'chat', user: user, text: text });
+      var u = LG.user(user);
+      return Q.mode === 'mc' ? (Q.answers.has(u.id) ? Q.answers.get(u.id).opt : -1) : Q.solved.has(u.id);
+    },
   };
 
   LG.start({
@@ -1591,6 +1758,10 @@
       bags.plate = new Bag('plate', D.plates.length);
       bgCanvas = buildBg();
       logoCanvas = buildLogo();
+      // toplu tahmin yakalayıcı: aynı türdeki tüm olası cevaplar (normalize, tek kelime)
+      DECOYS.plate = new Set(); DECOYS.word = new Set();
+      D.plates.forEach(function (p) { [p[1]].concat(p[2] || []).forEach(function (n) { DECOYS.plate.add(compact(n)); }); });
+      D.word.forEach(function (w) { DECOYS.word.add(compact(w[1])); });
       var cols = ['#ffffff', '#ffe08a', '#b8f2ff', '#ffb3c1'];
       for (var i = 0; i < 46; i++) sparkles.push({ x: Math.random() * W, y: Math.random() * H, r: LG.rand(1.5, 3.8), v: LG.rand(8, 30), f: LG.rand(1, 3), ph: Math.random() * TAU, c: LG.pick(cols) });
       startRound(1);

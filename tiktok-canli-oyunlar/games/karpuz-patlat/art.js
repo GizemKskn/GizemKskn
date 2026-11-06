@@ -388,11 +388,11 @@
     // ışık
     var lg = ctx.createRadialGradient(cx - RX * 0.4, cy - RY * 0.45, 4, cx - RX * 0.15, cy - RY * 0.15, RX * 1.25);
     lg.addColorStop(0, 'rgba(255,255,255,0.45)'); lg.addColorStop(0.32, 'rgba(255,255,255,0.07)'); lg.addColorStop(1, 'rgba(0,0,0,0.25)');
-    ctx.fillStyle = lg; ctx.fillRect(cx - RX * 1.3, cy - RY * 1.2, RX * 2.6, RY * 2.4);
+    ctx.fillStyle = lg; ctx.fillRect(cx - RX * 1.16, cy - RY * 1.04, RX * 2.32, RY * 2.08);
     // kırmızı gerilim parıltısı
     if (st.glow > 0) {
       ctx.fillStyle = 'rgba(255,40,40,' + (st.glow * 0.22).toFixed(3) + ')';
-      ctx.fillRect(cx - RX * 1.3, cy - RY * 1.2, RX * 2.6, RY * 2.4);
+      ctx.fillRect(cx - RX * 1.16, cy - RY * 1.04, RX * 2.32, RY * 2.08);
     }
     // parlak yansıma
     ctx.save();
@@ -406,16 +406,7 @@
       ctx.beginPath(); ctx.ellipse(cx + RX * 0.45, cy + RY * 0.35, RX * 0.12, RY * 0.05, -0.9, 0, TAU); ctx.fill();
     }
     // arkadaki lastik yayları (soluk)
-    var bands = st.bands;
-    ctx.lineCap = 'round';
-    for (var i = 0; i < bands.length; i++) {
-      var b = bands[i];
-      var s2 = b.snap * b.snap;
-      var rx = (A.hwAt(g, b.v) + b.lw * 0.3) * (1 + 0.5 * s2);
-      ctx.strokeStyle = b.c; ctx.globalAlpha = 0.26; ctx.lineWidth = b.lw * 0.8;
-      ctx.beginPath(); ctx.ellipse(cx, cy + b.v * RY - 46 * s2, rx, rx * TILT, 0, PI * 1.04, PI * 1.96); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
+    if (st.backFn) st.backFn(ctx); else A.drawBandsBack(ctx, g, st.bands);
     // çatlaklar
     A.drawCracks(ctx, g, F, st.cracks, st.pv, st.tease);
     // yüzeyden süzülen damlalar
@@ -433,6 +424,20 @@
     A.outline(ctx, g);
     ctx.lineWidth = 5; ctx.strokeStyle = F.outline; ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
     A.drawTop(ctx, g, F, st.t);
+  };
+
+  A.drawBandsBack = function (ctx, g, bands) {
+    var cx = g.cx, cy = g.cy, RY = g.RY;
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.26;
+    for (var i = 0; i < bands.length; i++) {
+      var b = bands[i];
+      var s2 = b.snap * b.snap;
+      var rx = (A.hwAt(g, b.v) + b.lw * 0.3) * (1 + 0.5 * s2);
+      ctx.strokeStyle = b.c; ctx.lineWidth = b.lw * 0.8;
+      ctx.beginPath(); ctx.ellipse(cx, cy + b.v * RY - 46 * s2, rx, rx * TILT, 0, PI * 1.04, PI * 1.96); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   };
 
   function teardrop(ctx, x, y, r, color) {
@@ -526,7 +531,7 @@
     out.y = g.cy + b.v * g.RY - 46 * s2 + rx * TILT * sin(th);
     return out;
   };
-  A.drawBandsFront = function (ctx, g, bands, t, shadowFrom) {
+  A.drawBandsFront = function (ctx, g, bands, t, shadowFrom, noSparkle) {
     var cx = g.cx;
     ctx.lineCap = 'round';
     for (var i = 0; i < bands.length; i++) {
@@ -559,11 +564,23 @@
       var kx = cx + rx * cos(b.k), ky = yb + ry * sin(b.k);
       ctx.fillStyle = b.d;
       ctx.beginPath(); ctx.arc(kx, ky, lw * 0.55 + 2.5, 0, TAU); ctx.fill();
-      if (b.sparkle) {
+      if (b.sparkle && !noSparkle) {
         for (var sp = 0; sp < 3; sp++) {
           var th = ((t * 0.35 + sp / 3 + b.k) % 1) * PI;
           star(ctx, cx + rx * cos(th), yb + ry * sin(th), 9 + 4 * sin(t * 9 + sp * 2), '#fffbe0');
         }
+      }
+    }
+  };
+  // Önbellekten çizilen ışıltılı lastiklerin yıldızları (canlı)
+  A.drawSparkles = function (ctx, g, bands, t, maxN) {
+    for (var i = max(0, bands.length - (maxN || 999)); i < bands.length; i++) {
+      var b = bands[i];
+      if (!b.sparkle) continue;
+      var yb = g.cy + b.v * g.RY, rx = A.hwAt(g, b.v) + b.lw * 0.32, ry = rx * TILT;
+      for (var sp = 0; sp < 3; sp++) {
+        var th = ((t * 0.35 + sp / 3 + b.k) % 1) * PI;
+        star(ctx, g.cx + rx * cos(th), yb + ry * sin(th), 9 + 4 * sin(t * 9 + sp * 2), '#fffbe0');
       }
     }
   };
@@ -621,35 +638,53 @@
   // Kameraya sıçrayan su (ekran üstü)
   // ---------------------------------------------------------------------------
   A.makeSplat = function (x, y, r, color, t0) {
-    var s = { x: x, y: y, r: r, c: color, t0: t0, a: 0.78 + Math.random() * 0.17, rot: Math.random() * PI, sat: [], drips: [] };
-    var ns = 3 + Math.floor(Math.random() * 5);
-    for (var i = 0; i < ns; i++) {
-      var a = Math.random() * TAU, d = r * (1.0 + Math.random() * 0.9);
-      s.sat.push({ dx: cos(a) * d, dy: sin(a) * d, r: r * (0.12 + Math.random() * 0.25) });
+    var s = { x: x, y: y, r: r, c: color, t0: t0, a: 0.8 + Math.random() * 0.14, core: [], sat: [], streaks: [], drips: [] };
+    var nc = 3 + Math.floor(Math.random() * 3), i, a, d;
+    s.core.push({ dx: 0, dy: 0, r: r * 0.72 });
+    for (i = 1; i < nc; i++) {
+      a = Math.random() * TAU; d = r * (0.2 + Math.random() * 0.3);
+      s.core.push({ dx: cos(a) * d, dy: sin(a) * d, r: r * (0.38 + Math.random() * 0.3) });
+    }
+    var ns = 4 + Math.floor(Math.random() * 6);
+    for (i = 0; i < ns; i++) {
+      a = Math.random() * TAU; d = r * (0.95 + Math.random() * 0.95);
+      s.sat.push({ dx: cos(a) * d, dy: sin(a) * d, r: r * (0.06 + Math.random() * 0.17) });
+    }
+    var nk = 2 + Math.floor(Math.random() * 4);
+    for (i = 0; i < nk; i++) {
+      a = Math.random() * TAU; d = r * (0.85 + Math.random() * 0.3);
+      s.streaks.push({ dx: cos(a) * d, dy: sin(a) * d, rx: r * (0.22 + Math.random() * 0.25), ry: r * (0.06 + Math.random() * 0.05), rot: a });
     }
     var nd = r > 30 ? 1 + Math.floor(Math.random() * 2) : (Math.random() < 0.5 ? 1 : 0);
-    for (var k = 0; k < nd; k++) s.drips.push({ dx: (Math.random() - 0.5) * r * 1.1, w: r * (0.18 + Math.random() * 0.16), len: 0, max: 60 + Math.random() * 320, sp: 14 + Math.random() * 40 });
+    for (var k = 0; k < nd; k++) s.drips.push({ dx: (Math.random() - 0.5) * r * 0.9, w: r * (0.14 + Math.random() * 0.14), len: 0, max: 60 + Math.random() * 300, sp: 14 + Math.random() * 40 });
     return s;
   };
   A.drawSplat = function (ctx, s, now) {
     var age = now - s.t0;
     if (age < 0) return;
     var sc = age < 0.14 ? LG.ease.outBack(age / 0.14) : 1;
+    var i, q;
     ctx.globalAlpha = s.a * (s.fade != null ? s.fade : 1);
     ctx.fillStyle = s.c;
     ctx.beginPath();
-    ctx.ellipse(s.x, s.y, s.r * sc, s.r * 0.86 * sc, s.rot, 0, TAU);
-    for (var i = 0; i < s.sat.length; i++) { var q = s.sat[i]; ctx.moveTo(s.x + q.dx * sc + q.r, s.y + q.dy * sc); ctx.arc(s.x + q.dx * sc, s.y + q.dy * sc, q.r * sc, 0, TAU); }
+    for (i = 0; i < s.core.length; i++) { q = s.core[i]; ctx.moveTo(s.x + q.dx * sc + q.r * sc, s.y + q.dy * sc); ctx.arc(s.x + q.dx * sc, s.y + q.dy * sc, q.r * sc, 0, TAU); }
+    for (i = 0; i < s.sat.length; i++) { q = s.sat[i]; ctx.moveTo(s.x + q.dx * sc + q.r, s.y + q.dy * sc); ctx.arc(s.x + q.dx * sc, s.y + q.dy * sc, q.r * sc, 0, TAU); }
+    for (i = 0; i < s.streaks.length; i++) { q = s.streaks[i]; ctx.moveTo(s.x + q.dx * sc + q.rx, s.y + q.dy * sc); ctx.ellipse(s.x + q.dx * sc, s.y + q.dy * sc, q.rx * sc, q.ry * sc, q.rot, 0, TAU); }
     for (var k = 0; k < s.drips.length; k++) {
       var d = s.drips[k];
       if (d.len <= 1) continue;
       var dx = s.x + d.dx;
       ctx.rect(dx - d.w / 2, s.y, d.w, d.len);
-      ctx.moveTo(dx + d.w * 0.7, s.y + d.len); ctx.arc(dx, s.y + d.len, d.w * 0.7, 0, TAU);
+      ctx.moveTo(dx + d.w * 0.75, s.y + d.len); ctx.arc(dx, s.y + d.len, d.w * 0.75, 0, TAU);
     }
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.beginPath(); ctx.ellipse(s.x - s.r * 0.35 * sc, s.y - s.r * 0.35 * sc, s.r * 0.22 * sc, s.r * 0.12 * sc, -0.6, 0, TAU); ctx.fill();
+    // ıslak parlaklık
+    ctx.globalAlpha = 0.45 * (s.fade != null ? s.fade : 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(s.x - s.r * 0.3 * sc, s.y - s.r * 0.32 * sc, s.r * 0.2 * sc, s.r * 0.1 * sc, -0.6, 0, TAU);
+    for (k = 0; k < s.drips.length; k++) { d = s.drips[k]; if (d.len > 8) { ctx.moveTo(s.x + d.dx - d.w * 0.15 + d.w * 0.18, s.y + d.len - d.w * 0.2); ctx.arc(s.x + d.dx - d.w * 0.25, s.y + d.len - d.w * 0.2, d.w * 0.18, 0, TAU); } }
+    ctx.fill();
     ctx.globalAlpha = 1;
   };
 

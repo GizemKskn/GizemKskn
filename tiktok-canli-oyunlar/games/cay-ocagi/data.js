@@ -55,7 +55,7 @@
     ['Dondurma: külah mı kase mi?', ['Külah', 'külah', 'kulah', 'kornet'], ['Kase', 'kase']],
     ['Patates: ketçap mı mayonez mi?', ['Ketçap', 'ketçap', 'ketcap'], ['Mayonez', 'mayonez']],
     ['Tatil: otel mi kamp mı?', ['Otel', 'otel'], ['Kamp', 'kamp']],
-    ['Mesaj mı sesli mesaj mı?', ['Yazılı', 'yazılı', 'mesaj', 'yazi'], ['Sesli', 'sesli']],
+    ['Yazılı mesaj mı sesli mesaj mı?', ['Yazılı', 'yazılı', 'yazili', 'yazı'], ['Sesli', 'sesli']],
     ['İlkbahar mı sonbahar mı?', ['İlkbahar', 'ilkbahar', 'bahar'], ['Sonbahar', 'sonbahar', 'güz']],
     ['Sıcak çikolata mı salep mi?', ['Çikolata', 'çikolata', 'cikolata'], ['Salep', 'salep', 'sahlep']],
     ['Lokum mu helva mı?', ['Lokum', 'lokum'], ['Helva', 'helva']],

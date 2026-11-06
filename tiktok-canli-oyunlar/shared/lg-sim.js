@@ -47,7 +47,7 @@
     return list[0][0];
   }
   function commentFor(u) {
-    if (sim.genComment) { var c = sim.genComment(u); if (c) return c; }
+    if (sim.genComment) { var c = sim.genComment(LG.user(u)); if (c) return c; }
     if (sim.comments && sim.comments.length && Math.random() < 0.85) return weighted(sim.comments);
     return weighted(GENERIC);
   }
@@ -63,16 +63,28 @@
     return LG.pick(pool);
   }
 
+  // TikTok gecikmesini taklit et: ?lag=4 -> olaylar 3-5 sn gecikmeyle gelir (oylama/cevap testleri için)
+  var LAG = LG.qn ? LG.qn('lag', 0) : 0;
+  function send(evt) {
+    if (LAG > 0) setTimeout(function () { LG.emit(evt); }, (LAG * (0.75 + Math.random() * 0.5)) * 1000);
+    else LG.emit(evt);
+  }
+  // Seri hediye (aynı kişiden art arda): sim.giftStreak(kullanıcı, 'Gül', 10)
+  sim.giftStreak = function (u, giftName, n) {
+    u = u || randomBot(); n = n || 10;
+    for (var i = 0; i < n; i++) (function (d) { setTimeout(function () { sim.gift(u, giftName || 'Gül', 1); }, d); })(i * 120);
+  };
+
   // --- Tekil sahte olaylar (panel ve testler kullanır) -------------------------
-  sim.chat = function (u, text) { u = u || randomBot(); LG.emit({ type: 'chat', user: u, text: text != null ? text : commentFor(u) }); };
-  sim.like = function (u, n) { u = u || randomBot(); LG.emit({ type: 'like', user: u, count: n || LG.randi(1, 15) }); };
+  sim.chat = function (u, text) { u = u || randomBot(); send({ type: 'chat', user: u, text: text != null ? text : commentFor(u) }); };
+  sim.like = function (u, n) { u = u || randomBot(); send({ type: 'like', user: u, count: n || LG.randi(1, 15) }); };
   sim.gift = function (u, giftName, count) {
     u = u || randomBot();
     var g = giftName ? LG.giftInfo(giftName) || LG.GIFTS[0] : giftPick();
-    LG.emit({ type: 'gift', user: u, gift: { id: g.id, name: g.name, en: g.en, coins: g.coins, count: count || (g.coins < 10 ? LG.randi(1, 5) : 1) } });
+    send({ type: 'gift', user: u, gift: { id: g.id, name: g.name, en: g.en, coins: g.coins, count: count || (g.coins < 10 ? LG.randi(1, 5) : 1) } });
   };
-  sim.follow = function (u) { u = u || randomBot(); LG.emit({ type: 'follow', user: u }); };
-  sim.share = function (u) { u = u || randomBot(); LG.emit({ type: 'share', user: u }); };
+  sim.follow = function (u) { u = u || randomBot(); send({ type: 'follow', user: u }); };
+  sim.share = function (u) { u = u || randomBot(); send({ type: 'share', user: u }); };
   sim.join = function (u) { u = u || newBot(); LG.emit({ type: 'join', user: u }); };
   function newBot() { var b = makeBot(); sim.bots.push(b); return b; }
   function randomBot() {
