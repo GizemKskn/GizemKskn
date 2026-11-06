@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canlı Yayın Oyunları</title>
+  <style>
+    :root {
+      --bg: #0d0e1f; --bg2: #15173a; --card: #1b1d44; --line: #2e3170; --text: #f4f4ff; --mute: #a3a8d6;
+      --gold: #ffd166; --pink: #ff4d6d; --green: #06d6a0; --blue: #4cc9f0;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(1200px 600px at 20% -10%, #2a1d5c 0%, var(--bg) 60%); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; min-height: 100vh; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 60px; }
+    h1 { font-size: clamp(26px, 4vw, 40px); margin: 0 0 4px; }
+    h1 span { color: var(--gold); }
+    .sub { color: var(--mute); margin: 0 0 18px; }
+    .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 20px; }
+    .bar label { display: flex; align-items: center; gap: 6px; color: var(--mute); }
+    .bar select, .bar input[type=text] { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; }
+    .bar input[type=text] { width: 170px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font: inherit; cursor: pointer; text-decoration: none; }
+    .btn:hover { border-color: var(--gold); }
+    .btn.primary { background: linear-gradient(135deg, #ff4d6d, #ff9f1c); border: 0; color: #fff; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
+    .thumb { aspect-ratio: 9 / 16; max-height: 360px; background: #111 center/cover no-repeat; position: relative; display: flex; align-items: center; justify-content: center; font-size: 80px; }
+    .thumb .tag { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,.6); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+    .body { padding: 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .body h2 { margin: 0; font-size: 20px; }
+    .body p { margin: 0; color: var(--mute); }
+    .body ul { margin: 0; padding-left: 18px; color: var(--text); font-size: 14px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 8px; }
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--green); color: #022; padding: 10px 16px; border-radius: 10px; font-weight: 700; display: none; }
+    .help { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; margin-top: 24px; color: var(--mute); }
+    .help b { color: var(--text); }
+    code { background: #0008; padding: 1px 6px; border-radius: 5px; color: var(--gold); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🎮 Canlı Yayın <span>Oyunları</span></h1>
+    <p class="sub">TikTok LIVE için etkileşimli oyunlar. İzleyiciler yorum, beğeni ve hediyeyle oynar.</p>
+
+    <div class="bar">
+      <label>Bağlantı:
+        <select id="source">
+          <option value="bridge">Köprü (bridge/baslat.bat)</option>
+          <option value="tikfinity">TikFinity uygulaması</option>
+          <option value="auto">Otomatik (ikisini de dene)</option>
+        </select>
+      </label>
+      <label>Ekranda kullanıcı adın: <input type="text" id="brand" placeholder="@kullaniciadi"></label>
+      <label><input type="checkbox" id="music" checked> Müzik</label>
+      <a class="btn" id="hostLink" href="shared/host.html" target="_blank">🎙️ Sunucu paneli</a>
+      <a class="btn" href="docs/KURULUM.md" target="_blank">📖 Kurulum</a>
+    </div>
+
+    <div class="grid" id="grid"></div>
+
+    <div class="help">
+      <b>Nasıl kullanılır?</b><br>
+      1) <b>Demo</b> ile oyunu TikTok'a bağlanmadan dene (sahte izleyiciler; <code>S</code> simülatör paneli, <code>H</code> kısayollar).<br>
+      2) Yayında: <code>bridge/baslat.bat</code> ile köprüyü aç (ya da TikFinity'yi aç) → <b>Yayın linkini kopyala</b> → OBS'te <i>Tarayıcı Kaynağı</i> ekle, linki yapıştır, boyutu <b>1080 × 1920</b> yap.<br>
+      3) Sunucu panelini ayrı bir pencerede aç: yeni gelenleri selamla, hediye gönderenlere teşekkür et.
+    </div>
+  </div>
+  <div class="toast" id="toast">Kopyalandı ✓</div>
+
+  <script src="games/oyunlar.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    function get(k, d) { try { var v = localStorage.getItem('lg-launch:' + k); return v === null ? d : v; } catch (e) { return d; } }
+    function set(k, v) { try { localStorage.setItem('lg-launch:' + k, v); } catch (e) {} }
+    $('source').value = get('source', 'bridge');
+    $('brand').value = get('brand', '');
+    $('music').checked = get('music', '1') === '1';
+    ['source', 'brand', 'music'].forEach(function (id) {
+      $(id).addEventListener('change', function () { set(id, id === 'music' ? ($('music').checked ? '1' : '0') : $(id).value); updateHost(); });
+    });
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function liveUrl(g) {
+      var src = $('source').value;
+      var q = '?source=' + src;
+      var brand = $('brand').value.trim();
+      if (brand) q += '&brand=' + encodeURIComponent(brand.charAt(0) === '@' ? brand : '@' + brand);
+      if (!$('music').checked) q += '&music=0';
+      // Köprü açıkken oyunlar http://localhost:8787 üzerinden de sunulur (önerilen)
+      if (src === 'bridge') return 'http://localhost:8787/games/' + g.id + '/index.html' + q;
+      return new URL('games/' + g.id + '/index.html' + q, location.href).href;
+    }
+    function updateHost() {
+      var src = $('source').value;
+      $('hostLink').href = 'shared/host.html?source=' + src;
+    }
+    updateHost();
+    var games = (window.LG_GAMES || []).filter(function (g) { return !g.hidden; });
+    $('grid').innerHTML = games.map(function (g) {
+      var thumb = g.thumb ? ' style="background-image:url(\'' + esc(g.thumb) + '\')"' : '';
+      return '<div class="card">' +
+        '<div class="thumb"' + thumb + '>' + (g.thumb ? '' : esc(g.emoji || '🎮')) + (g.tag ? '<span class="tag">' + esc(g.tag) + '</span>' : '') + '</div>' +
+        '<div class="body"><h2>' + esc(g.emoji || '') + ' ' + esc(g.title) + '</h2><p>' + esc(g.desc || '') + '</p>' +
+        (g.howTo ? '<ul>' + g.howTo.map(function (h) { return '<li>' + esc(h) + '</li>'; }).join('') + '</ul>' : '') +
+        '<div class="actions"><a class="btn primary" href="games/' + g.id + '/index.html?sim=1&demo=1" target="_blank">▶ Demo</a>' +
+        '<button class="btn" data-copy="' + g.id + '">🎥 Yayın linkini kopyala</button></div></div></div>';
+    }).join('') || '<p>Henüz oyun yok.</p>';
+    $('grid').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-copy]'); if (!b) return;
+      var g = games.find(function (x) { return x.id === b.getAttribute('data-copy'); });
+      var url = liveUrl(g);
+      var done = function () { $('toast').textContent = 'Kopyalandı ✓  ' + url; $('toast').style.display = 'block'; setTimeout(function () { $('toast').style.display = 'none'; }, 3500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { prompt('Linki kopyalayın:', url); });
+      else prompt('Linki kopyalayın:', url);
+    });
+  })();
+  </script>
+</body>
+</html>

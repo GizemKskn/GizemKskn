@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sunucu Paneli — Canlı Oyunlar</title>
+  <style>
+    :root { --bg:#0f1020; --card:#1a1b33; --line:#2c2e55; --text:#f2f2ff; --mute:#9aa0c8; --gold:#ffd166; --green:#06d6a0; --red:#ff4d6d; --blue:#4cc9f0; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:15px/1.4 "Segoe UI",system-ui,sans-serif; }
+    header { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 14px; background:#14152b; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+    header h1 { font-size:18px; margin:0 10px 0 0; }
+    .pill { background:var(--card); border:1px solid var(--line); border-radius:999px; padding:4px 12px; white-space:nowrap; }
+    .pill b { color:var(--gold); }
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--red); margin-right:6px; vertical-align:middle; }
+    .dot.ok { background:var(--green); }
+    select, button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:5px 10px; font:inherit; cursor:pointer; }
+    main { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:12px; padding:12px; }
+    section { background:var(--card); border:1px solid var(--line); border-radius:14px; display:flex; flex-direction:column; min-height:280px; max-height:calc(100vh - 150px); }
+    section h2 { font-size:16px; margin:0; padding:10px 12px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+    section h2 small { color:var(--mute); font-weight:400; }
+    .list { overflow:auto; padding:6px; flex:1; }
+    .item { display:flex; gap:8px; align-items:center; padding:7px 8px; border-radius:10px; margin:3px 0; background:#20224a; cursor:pointer; }
+    .item:hover { background:#2a2d60; }
+    .item .name { font-weight:700; }
+    .item .meta { color:var(--mute); font-size:13px; margin-left:auto; white-space:nowrap; }
+    .item.flag { background:#4a1d2b; }
+    .item.big { border:2px solid var(--gold); }
+    .chat .item { cursor:default; }
+    .tips { padding:10px 12px; }
+    .tip { background:#20224a; border-left:4px solid var(--blue); padding:10px 12px; border-radius:8px; margin:6px 0; font-size:16px; }
+    .alert { display:none; background:var(--gold); color:#222; padding:10px 14px; font-weight:700; text-align:center; }
+    .empty { color:var(--mute); text-align:center; padding:20px; }
+    kbd { background:#333; border-radius:4px; padding:1px 6px; }
+  </style>
+</head>
+<body>
+  <div class="alert" id="breakAlert">⏸ Bir süredir yayındasın. Ayrılacaksan TikTok'ta "Canlı yayını duraklat" kullan — başında kimse olmayan yayınlar para kazanamayabilir.</div>
+  <header>
+    <h1>🎙️ Sunucu Paneli</h1>
+    <span class="pill"><span class="dot" id="connDot"></span><span id="connText">bağlanıyor…</span></span>
+    <span class="pill">⏱ <b id="dur">0:00</b></span>
+    <span class="pill">👀 <b id="viewers">0</b></span>
+    <span class="pill">💬 <b id="chats">0</b></span>
+    <span class="pill">❤️ <b id="likes">0</b></span>
+    <span class="pill">🎁 <b id="coins">0</b> jeton ≈ <b id="tl">0</b> TL*</span>
+    <label class="pill">Oyun: <select id="gameSel"></select></label>
+    <button id="clearBtn" title="Selamlanan/teşekkür edilenleri temizle">🧹 Temizle</button>
+  </header>
+  <main>
+    <section>
+      <h2>👋 Selamla <small>yeni gelenler — tıkla = selamlandı</small></h2>
+      <div class="list" id="greet"><div class="empty">Yeni katılımcılar burada görünecek</div></div>
+    </section>
+    <section>
+      <h2>🎁 Teşekkür et <small>tıkla = teşekkür edildi</small></h2>
+      <div class="list" id="thanks"><div class="empty">Hediyeler burada görünecek</div></div>
+    </section>
+    <section class="chat">
+      <h2>💬 Yorumlar <small>kırmızı = filtrelendi</small></h2>
+      <div class="list" id="chat"></div>
+    </section>
+    <section>
+      <h2>🏆 Bu yayının destekçileri</h2>
+      <div class="list" id="top"></div>
+      <div class="tips" id="tips"></div>
+    </section>
+  </main>
+  <p style="color:var(--mute);padding:0 14px 14px;font-size:12px">
+    * TL tahmini: jeton × <span id="rateTxt"></span> (yaklaşık; TikTok gerçek oranı yayınlamıyor, %15 stopaj hariç). Bu panel yayında görünmez — ayrı bir pencerede açık tut.
+    Kaynak: <code>?source=bridge</code> (köprü), <code>?source=tikfinity</code>, test için <code>?source=sim&amp;demo=1</code>.
+  </p>
+
+  <script src="lg-core.js"></script>
+  <script src="lg-filter.js"></script>
+  <script src="lg-sim.js"></script>
+  <script src="../games/oyunlar.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    // Jeton başına tahmini yayıncı kazancı (TL). URL: ?tl=0.2
+    var TL_PER_COIN = LG.qn('tl', 0.004 * 49.5);
+    document.getElementById('rateTxt').textContent = TL_PER_COIN.toFixed(3) + ' TL';
+    var $ = function (id) { return document.getElementById(id); };
+    var greeted = new Set(), thanked = new Set();
+    var greetQ = [], thanksQ = [], chatQ = [];
+    var startedAt = Date.now();
+
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function render() {
+      $('greet').innerHTML = greetQ.length ? greetQ.slice(0, 60).map(function (g) {
+        return '<div class="item" data-greet="' + esc(g.id) + '"><span>' + g.icon + '</span><span class="name">' + esc(g.name) + '</span><span class="meta">' + esc(g.why) + '</span></div>';
+      }).join('') : '<div class="empty">Herkes selamlandı 👍</div>';
+      $('thanks').innerHTML = thanksQ.length ? thanksQ.slice(0, 60).map(function (g) {
+        return '<div class="item' + (g.coins >= 100 ? ' big' : '') + '" data-thank="' + g.key + '"><span>' + g.icon + '</span><span class="name">' + esc(g.name) + '</span><span>' + esc(g.what) + '</span><span class="meta">' + g.coins + ' jeton</span></div>';
+      }).join('') : '<div class="empty">Teşekkür bekleyen yok</div>';
+      var top = Array.from(LG.users.values()).filter(function (u) { return u.coins > 0; }).sort(function (a, b) { return b.coins - a.coins; }).slice(0, 10);
+      $('top').innerHTML = top.length ? top.map(function (u, i) {
+        return '<div class="item"><span>' + (['🥇', '🥈', '🥉'][i] || (i + 1)) + '</span><span class="name">' + esc(u.name) + '</span><span class="meta">' + u.coins + ' jeton · ' + u.comments + ' yorum</span></div>';
+      }).join('') : '<div class="empty">Henüz yok</div>';
+    }
+    function addChat(e) {
+      var div = document.createElement('div');
+      div.className = 'item' + (e.flagged ? ' flag' : '');
+      div.innerHTML = '<span class="name">' + esc(e.user.name) + '</span><span>' + esc(e.flagged ? e.raw : e.text) + '</span>';
+      var list = $('chat');
+      list.prepend(div);
+      while (list.children.length > 150) list.lastChild.remove();
+    }
+    var dirty = false;
+    function mark() { dirty = true; }
+    setInterval(function () { if (dirty) { dirty = false; render(); } }, 300);
+
+    LG.on('newUser', function (e) {
+      if (greeted.has(e.user.id)) return;
+      greetQ.unshift({ id: e.user.id, name: e.user.name, icon: e.type === 'gift' ? '🎁' : e.type === 'like' ? '❤️' : '💬', why: e.type === 'chat' ? 'ilk yorumu' : e.type === 'like' ? 'beğendi' : e.type === 'follow' ? 'takip etti' : 'ilk etkileşim' });
+      if (greetQ.length > 200) greetQ.length = 200;
+      mark();
+    });
+    LG.on('follow', function (e) { greetQ.unshift({ id: e.user.id + ':f', name: e.user.name, icon: '➕', why: 'takip etti — teşekkür et' }); mark(); });
+    LG.on('share', function (e) { greetQ.unshift({ id: e.user.id + ':s' + Date.now(), name: e.user.name, icon: '↗️', why: 'paylaştı — teşekkür et' }); mark(); });
+    LG.on('gift', function (e) {
+      var key = 'g' + Date.now() + Math.random().toString(36).slice(2, 6);
+      // Aynı kişinin art arda küçük hediyelerini birleştir
+      var last = thanksQ[0];
+      if (last && last.uid === e.user.id && last.giftName === e.gift.name && Date.now() - last.at < 20000) {
+        last.count += e.gift.count; last.coins += e.gift.total; last.what = e.gift.name + ' x' + last.count; last.at = Date.now();
+      } else {
+        thanksQ.unshift({ key: key, uid: e.user.id, name: e.user.name, giftName: e.gift.name, count: e.gift.count, coins: e.gift.total, what: e.gift.name + (e.gift.count > 1 ? ' x' + e.gift.count : ''), icon: LG.giftEmoji(e.gift), at: Date.now() });
+      }
+      if (thanksQ.length > 200) thanksQ.length = 200;
+      mark();
+    });
+    LG.on('chat', addChat);
+    LG.on('connection', function (c) {
+      $('connDot').className = 'dot' + (c.state === 'bağlı' || c.state === 'simülasyon' ? ' ok' : '');
+      $('connText').textContent = (c.source || '') + ' ' + c.state;
+    });
+
+    $('greet').addEventListener('click', function (e) {
+      var it = e.target.closest('[data-greet]'); if (!it) return;
+      var id = it.getAttribute('data-greet'); greeted.add(id);
+      greetQ = greetQ.filter(function (g) { return g.id !== id; }); render();
+    });
+    $('thanks').addEventListener('click', function (e) {
+      var it = e.target.closest('[data-thank]'); if (!it) return;
+      var k = it.getAttribute('data-thank'); thanked.add(k);
+      thanksQ = thanksQ.filter(function (g) { return g.key !== k; }); render();
+    });
+    $('clearBtn').onclick = function () { greetQ.forEach(function (g) { greeted.add(g.id); }); greetQ = []; thanksQ = []; render(); };
+
+    // Oyun seçimi ve sunucu ipuçları
+    var games = (window.LG_GAMES || []).filter(function (g) { return !g.hidden; });
+    var sel = $('gameSel');
+    sel.innerHTML = '<option value="">Genel</option>' + games.map(function (g) { return '<option value="' + g.id + '">' + esc(g.title) + '</option>'; }).join('');
+    sel.value = LG.store.get('host-game', '');
+    var GENERAL = [
+      'Hoş geldin {ad}! Yorum yazman yeterli, oyuna anında katılıyorsun.',
+      'Yeni gelenler: ekrandaki karakterlerin hepsi yorum yazan arkadaşlar. Sen de yaz, sen de gir!',
+      'Beğeniler de sayılıyor — ekrana dokunmak bile oyunu değiştiriyor.',
+      '{ad}, çok teşekkürler! Ekranda kutlamanı gördün mü?',
+      'Bir sonraki tur birazdan başlıyor, yerini al!',
+    ];
+    function showTips() {
+      var g = games.find(function (x) { return x.id === sel.value; });
+      var tips = (g && g.hostTips && g.hostTips.length ? g.hostTips : GENERAL);
+      $('tips').innerHTML = '<b>🗣️ Söyleyebileceklerin</b>' + tips.map(function (t) { return '<div class="tip">' + esc(t) + '</div>'; }).join('') +
+        (g && g.keys ? '<div style="margin-top:8px;color:var(--mute)">⌨️ ' + g.keys.map(function (k) { return '<kbd>' + esc(k[0]) + '</kbd> ' + esc(k[1]); }).join(' · ') + '</div>' : '');
+    }
+    sel.onchange = function () { LG.store.set('host-game', sel.value); showTips(); };
+    showTips();
+
+    setInterval(function () {
+      var s = LG.stats;
+      $('viewers').textContent = s.viewers; $('chats').textContent = s.chats; $('likes').textContent = LG.fmt(s.likes);
+      $('coins').textContent = LG.fmt(s.coins); $('tl').textContent = (s.coins * TL_PER_COIN).toFixed(0);
+      var sec = Math.floor((Date.now() - startedAt) / 1000);
+      $('dur').textContent = Math.floor(sec / 3600) + ':' + String(Math.floor(sec / 60) % 60).padStart(2, '0');
+      // Her 45 dakikada bir mola hatırlatması (15 sn görünür)
+      $('breakAlert').style.display = sec > 60 && (sec % 2700) < 15 ? 'block' : 'none';
+    }, 1000);
+
+    LG.connect();
+    if (LG.config.source === 'sim' || LG.config.demo) { LG.sim.init && LG.sim.init(); if (LG.config.demo) LG.sim.startAuto(); }
+    render();
+  })();
+  </script>
+</body>
+</html>

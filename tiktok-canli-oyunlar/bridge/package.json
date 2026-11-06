@@ -1,0 +1,20 @@
+{
+  "name": "tiktok-canli-oyun-koprusu",
+  "version": "1.0.0",
+  "description": "TikTok LIVE olaylarını yerel oyunlara ileten köprü",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node server.js --test"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "tiktok-live-connector": "^2.5.0",
+    "ws": "^8.22.1"
+  },
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}
