@@ -1534,7 +1534,7 @@
     ctx.save();
     ctx.globalAlpha = a;
     ctx.translate(540, 905); ctx.rotate(s.text === 'DUR!' ? -0.07 : 0.05); ctx.scale(sc, sc);
-    ui.emoji(ctx, s.icon, -sz * 1.25, 0, sz * 0.8);
+    ui.emoji(ctx, s.icon, -sz * 1.42, 0, sz * 0.8);
     ui.text(ctx, s.text, sz * 0.32, 4, { size: sz, color: s.col, strokeWidth: sz * 0.15, strokeColor: '#1a0510' });
     ctx.restore();
   }
