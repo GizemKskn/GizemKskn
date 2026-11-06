@@ -37,10 +37,12 @@
   var MAX_LABELS = 15;      // aynı anda en fazla isim etiketi
   var CHAT_CD = 1.2;        // aynı kişinin yorumla lastik takma aralığı (sn)
   var LIKES_PER_BAND = 15;
-  var MIN_PLAY = max(5, LG.qn('mintur', 40));
-  var RETARGET_AT = [6, 15, 40]; // tur içi gizli eşik kontrolleri (sn) // bir meyve en erken bu kadar saniyede patlar (gerilim doruğa yakın bekler)
+  var MIN_PLAY = max(5, LG.qn('mintur', 40)); // bir meyve en erken bu kadar saniyede patlar (gerilim doruğa yakın bekler)
+  var RT_EVERY = 1.5;       // gizli eşik bu sıklıkla (sn) yayının hızına göre yeniden kontrol edilir
   var TH_MIN = max(10, LG.qn('minlastik', 40));
   var TH_MAX = max(TH_MIN + 10, LG.qn('maxlastik', 900));
+  // Hediye lastikleri (küçük hediyeler) kişi başı kova ile sınırlanır: seri gül/kalp tek başına turu bitirmesin
+  var GIFT_BUCKET = 18, GIFT_REFILL = 1.0; // en çok 18 lastik birikir, saniyede 1 dolar
 
   var L = { x0: SAFE.x, x1: SAFE.x + SAFE.w, titleY: 292, chipY: 346, chipH: 54, meterY: 412, meterH: 60, noteY: 512, gTop: 550, gBot: 1036, gW: 184, hintY: 1222, hintH: 70 };
   var CAMT = LG.CAM && LG.CAM.y < 700 ? LG.CAM : null;
@@ -61,7 +63,8 @@
     guesses: new Map(), guessOpen: true,
     board: new LG.Board(),
     recent: [], tease: 0, crackBoost: 0, waist: 0, creakT: 2, res: null, landed: false,
-    p0: 0, u0: 0, freeRound: 0, retargets: 0, hold: false, holdEnd: 0, burstAdds: 0,
+    p0: 0, u0: 0, freeRound: 0, nextRT: 0, dur: 150, hold: false, holdEnd: 0, burstAdds: 0,
+    qNames: [], qBump: 0, idleA: 0,
   };
   var fruit = { x: 540, rot: 0, sq: 0, sqV: 0, press: 0, ox: 0, oy: 0, visible: true };
   var G = A.G;
@@ -93,17 +96,29 @@
     var span = S.threshold - S.u0;
     return clamp(S.p0 + (1 - S.p0) * (span > 0 ? (S.units - S.u0) / span : 1), 0, 1);
   }
-  // Yayın kalabalıksa (yorumlar beklenenden hızlı geliyorsa) tur 2–4 dk sürsün diye eşiği gizlice yükselt
+  // Yayın kalabalıksa (yorumlar beklenenden hızlı geliyorsa) tur ~2–3 dk sürsün diye eşiği gizlice yükselt.
+  // Sık (RT_EVERY) kontrol edilir: böylece kalabalık bir başlangıç göstergeyi erkenden %90'lara kilitlemez.
   function retarget() {
     var el = now() - S.playStart;
-    if (el < 5 || S.hold || progress() > 0.9) return;
-    var rate = S.freeRound / el;
-    var want = rate * max(60, LG.rand(100, 160) - el * 0.5);
+    if (el < 1.5 || S.hold || el > S.dur * 0.8) return;
+    var pr = progress();
+    if (pr > 0.88) return; // doruğa çok yakın: artık beklet (gösterge geri düşmesin)
+    var rate = S.freeRound / max(12, el); // ilk saniyelerdeki ani patlamayı yumuşat
+    var want = rate * max(30, S.dur - el);
     var remain = S.threshold - S.units;
-    if (want > remain * 1.25 && S.threshold < TH_MAX) {
-      S.p0 = progress(); S.u0 = S.units;
+    if (want > remain * 1.2 && S.threshold < TH_MAX && S.units + want > S.threshold) {
+      S.p0 = pr; S.u0 = S.units;
       S.threshold = min(TH_MAX, S.units + Math.round(want));
     }
+  }
+  // Küçük hediyelerin lastik kovası (kişi başı)
+  function giftQuota(u, want) {
+    var d = u.data, t = now();
+    if (d.kpGT == null) { d.kpGT = t; d.kpGB = GIFT_BUCKET; }
+    d.kpGB = min(GIFT_BUCKET, d.kpGB + (t - d.kpGT) * GIFT_REFILL); d.kpGT = t;
+    var n = min(want, Math.floor(d.kpGB));
+    d.kpGB -= n;
+    return n;
   }
   function canFloat(gap) { if (now() - lastFloat < (gap || 0.2)) return false; lastFloat = now(); return true; }
 
@@ -146,6 +161,14 @@
   function queueBand(u, o) {
     S.queue.push({ u: u, o: o || {} });
     if (S.queue.length > 800) S.queue.splice(0, S.queue.length - 800);
+    // Meyve oyunda değilken (sonuç/temizlik/giriş) yorum yazanın adı "Sırada" şeridinde hemen görünsün
+    if (u && S.st !== 'play') {
+      var qn = S.qNames;
+      for (var i = 0; i < qn.length; i++) if (qn[i] === u) { qn.splice(i, 1); break; }
+      qn.unshift(u);
+      if (qn.length > 3) qn.length = 3;
+      S.qBump = 1;
+    }
   }
   function mergeOld() {
     var bs = S.bands, a = bs[0], best = 1, bd = 9;
@@ -203,8 +226,8 @@
     while (freeLog.length && freeLog[0] < t - 150) freeLog.shift();
     var span = min(150, t - sessionStart);
     var th;
-    if (span < 45 || freeLog.length < 10) th = LG.randi(45, 85);
-    else th = Math.round(freeLog.length / span * LG.rand(105, 185));
+    if (span < 45 || freeLog.length < 10) th = LG.randi(45, 85); // geçmiş yok: sakin yayın varsay (tur içinde yükselir)
+    else th = Math.round(freeLog.length / span * S.dur * LG.rand(0.8, 1.0));
     return clamp(th, TH_MIN, TH_MAX);
   }
   function genCracks() {
@@ -236,7 +259,8 @@
     S.fi = (S.fi + 1) % FRUITS.length;
     S.F = FRUITS[S.fi];
     S.bands = []; S.units = 0; S.board.reset(); S.guesses.clear(); S.guessOpen = true;
-    S.threshold = computeThreshold(); S.K = LG.rand(0.85, 0.96); S.p0 = 0; S.u0 = 0; S.freeRound = 0; S.retargets = 0; S.hold = false;
+    S.dur = LG.rand(120, 175); // hedef tur süresi (sn); gizli eşik buna göre ayarlanır
+    S.threshold = computeThreshold(); S.K = LG.rand(0.85, 0.96); S.p0 = 0; S.u0 = 0; S.freeRound = 0; S.nextRT = 0; S.hold = false;
     S.pv = 0; S.pvT = 0; S.tease = 0; S.crackBoost = 0; S.waist = LG.rand(-0.08, 0.08);
     S.lastUser = null; S.burster = null; S.res = null; S.recent = []; gutVer++;
     cracks = genCracks(); drips = []; puddle = 0; labels = [];
@@ -250,7 +274,8 @@
     LG.music.setTempo(1);
   }
   function startPlay() {
-    S.st = 'play'; S.t = 0; S.playStart = now();
+    S.st = 'play'; S.t = 0; S.playStart = now(); S.nextRT = now() + RT_EVERY;
+    S.qNames = [];
     // önceki turdan taşınan yorum lastiklerini sınırla (hediye lastikleri korunur)
     var cap = Math.floor(S.threshold * 0.35), free = 0, i;
     for (i = 0; i < S.queue.length; i++) if (S.queue[i].o.free) free++;
@@ -455,16 +480,13 @@
     var big = tier >= 3 && ui.spotlightAllowed(u, tier);
     var gname = g.name + (g.count > 1 ? ' x' + g.count : '');
     var n, i;
-    if (tier === 1) {
-      n = 3 * min(g.count, 5);
-      for (i = 0; i < n; i++) queueBand(u, { lw: 6.5 });
-      note(em, u.name + ' · ' + fmt(T.plusBands, { n: n }) + ' 💖', '#ffd166', 'g' + u.id + g.name);
-      LG.sfx('coin');
-    } else if (tier === 2) {
-      n = 5 * min(g.count, 3);
-      for (i = 0; i < n; i++) queueBand(u, { lw: 8, sparkle: true, hs: (i % 3) * 14 });
-      note(em, u.name + ' · ' + fmt(T.plusBands, { n: n }) + ' ✨💖', '#ffd166', 'g' + u.id + g.name);
-      LG.sfx('coin'); LG.sfx('levelup');
+    if (tier === 1 || tier === 2) {
+      // küçük hediyeler: +3 / +5 ışıltılı lastik; seri gönderimde kişi başı kova ile sınırlı (fazlası sadece teşekkür)
+      n = giftQuota(u, tier === 1 ? 3 * min(g.count, 5) : 5 * min(g.count, 3));
+      for (i = 0; i < n; i++) queueBand(u, tier === 1 ? { lw: 6.5 } : { lw: 8, sparkle: true, hs: (i % 3) * 14 });
+      note(em, u.name + ' · ' + (n > 0 ? fmt(T.plusBands, { n: n }) + (tier === 2 ? ' ✨💖' : ' 💖') : T.thanks), '#ffd166', 'g' + u.id + g.name + (n > 0 ? '' : '_t'));
+      if (!fin && canFloat(0.15)) ui.float('', LG.rand(330, 750), A.BASE_Y - LG.rand(60, 200), { emoji: em, size: 44, life: 1.2, vy: -150 });
+      LG.sfx('coin'); if (tier === 2) LG.sfx('levelup');
     } else if (tier === 3) {
       n = min(g.count, 3);
       for (i = 0; i < n; i++) queueBand(u, { lw: 22, kind: 'thick', units: 10, impulse: 2.2 });
@@ -487,7 +509,7 @@
     }
   });
 
-  var STICKER_SLOTS = [[118, 1128], [950, 1128], [262, 1158], [812, 1158], [396, 1178], [684, 1178]];
+  var STICKER_SLOTS = [[142, 1128], [938, 1128], [276, 1160], [804, 1160], [404, 1180], [676, 1180]];
   LG.on('follow', function (e) {
     var u = e.user;
     if (!u) return;
@@ -546,9 +568,12 @@
         } else S.relAcc = 0;
         if (S.st !== 'play') break;
         var el = t - S.playStart;
-        if (S.retargets < RETARGET_AT.length && el > RETARGET_AT[S.retargets]) { S.retargets++; retarget(); }
+        if (t >= S.nextRT) { S.nextRT = t + RT_EVERY; retarget(); }
         if (S.hold && t >= S.holdEnd) { startCritical(S.lastUser); break; }
-        if (el > 210 && S.threshold > S.units + 1) S.threshold = max(S.units + 1, S.threshold - dt * 0.35); // lastik yorgunluğu
+        // lastik yorgunluğu: hedef süre aşılınca gizli eşik yavaşça lastik sayısına yaklaşır (gösterge kendiliğinden yükselir)
+        if (el > S.dur + 15 && S.threshold > S.units + 1) S.threshold = max(S.units + 1, S.threshold - (0.3 + (S.threshold - S.units) * 0.03) * dt);
+        // en uzun tur ~4 dk: meyve daha fazla dayanamaz
+        if (el > S.dur + 80 && S.units > 0) { startCritical(S.lastUser); break; }
         if (S.guessOpen && S.pv >= 0.5) { S.guessOpen = false; note('🎯', T.guessesClosed, '#7dffb0'); LG.sfx('bell'); }
         S.creakT -= dt;
         if (S.creakT <= 0) {
@@ -702,6 +727,9 @@
     if (notes.length) { notes[0].t += dt; if (notes[0].t > noteLife()) notes.shift(); }
     if (!banner && banners.length && !isFinale()) banner = banners.shift();
     if (banner) { banner.t += dt * (banners.length > 1 ? 1.5 : 1); if (banner.t >= banner.dur) banner = null; }
+    var idleWant = S.st === 'play' && !notes.length && S.units > 0 && !banner ? 1 : 0;
+    S.idleA += (idleWant - S.idleA) * min(1, dt * (idleWant ? 2.5 : 12));
+    S.qBump = max(0, S.qBump - dt * 4);
   }
 
   // ---------------------------------------------------------------------------
@@ -916,7 +944,12 @@
     var tn = now();
     if (!GC.l || (GC.ver !== gutVer && tn - GC.t > 0.2) || tn - GC.t > 1.5) renderGutters();
     var y0 = L.gTop, w = L.gW, xl = SAFE.x, xr = SAFE.x + SAFE.w - w;
+    // giriş afişi okunaklı kalsın: yan paneller meyve yerleşince belirir
+    var ga = S.st === 'intro' ? clamp((S.t - 1.7) / 0.5, 0, 1) : 1;
+    if (ga <= 0) return;
+    ctx.globalAlpha = ga;
     ctx.drawImage(GC.l, xl, y0); ctx.drawImage(GC.r, xr, y0);
+    ctx.globalAlpha = 1;
     // en yeni katılanın çevresinde dalga (canlı)
     if (S.recent.length) {
       var age = tn - S.recent[0].t;
@@ -927,6 +960,36 @@
       }
     }
     void t;
+  }
+
+  // Bildirim yokken: sosyal kanıt + katılım çağrısı ("👥 37 kişi lastik taktı · Sen de yaz! 💬")
+  var idleCache = { n: -1, text: '', w: 0 };
+  function drawIdle(ctx, t) {
+    if (S.idleA < 0.03 || notes.length) return;
+    var np = S.board.scores.size;
+    if (idleCache.n !== np) {
+      idleCache.n = np; idleCache.text = fmt(T.crowd, { n: np });
+      ctx.save(); ctx.font = ui.font(28, 800); idleCache.w = min(820, ctx.measureText(idleCache.text).width + 56); ctx.restore();
+    }
+    var w = idleCache.w, y = L.noteY, x = 540 - w / 2;
+    ctx.save();
+    ctx.globalAlpha = S.idleA * (0.82 + 0.12 * sin(t * 3));
+    ui.panel(ctx, x, y - 24, w, 48, { r: 24, fill: 'rgba(15,8,25,0.66)', border: 'rgba(125,255,176,0.55)', lineWidth: 3 });
+    ui.text(ctx, idleCache.text, 540, y + 2, { size: 28, color: '#d9ffe8', maxWidth: w - 30, strokeWidth: 5 });
+    ctx.restore();
+  }
+  // Meyve oyunda değilken yazanlar: "🎗️ Sırada: ayse, mehmet, can +12"
+  function drawQueueBar(ctx, t) {
+    var qn = S.qNames, more = max(0, S.queue.length - qn.length);
+    var names = [];
+    for (var i = 0; i < qn.length; i++) names.push(qn[i].name);
+    var txt = fmt(T.queueLine, { names: names.join(', ') }) + (more > 0 ? '  +' + more : '');
+    var sc = 1 + S.qBump * 0.06;
+    ctx.save();
+    ctx.translate(540, L.hintY + L.hintH / 2); ctx.scale(sc, sc); ctx.translate(-540, -(L.hintY + L.hintH / 2));
+    ui.panel(ctx, 130, L.hintY, 820, L.hintH, { r: L.hintH / 2, fill: 'rgba(15,8,25,0.8)', border: 'rgba(255,209,102,' + (0.55 + 0.35 * sin(t * 6)).toFixed(2) + ')', lineWidth: 4 });
+    ui.text(ctx, txt, 540, L.hintY + L.hintH / 2 + 2, { size: 34, maxWidth: 770, color: '#fff3c4' });
+    ctx.restore();
   }
 
   function drawNote(ctx) {
@@ -951,7 +1014,7 @@
     if (a <= 0) return;
     var sc = ease.outBack(clamp(bn.t / 0.4, 0, 1));
     var big = bn.tier >= 5;
-    var y = big ? 1000 : 990;
+    var y = big ? 1098 : 1112; // meyvenin altında (tahta hizası): meyve ve isimler görünür kalsın
     ctx.save();
     ctx.globalAlpha = a;
     if (big) {
@@ -960,7 +1023,7 @@
       ctx.fillStyle = rg; ctx.fillRect(0, 230, W, 1070);
     }
     ctx.translate(540, y); ctx.scale(sc, sc);
-    var bw = 920, bh = big ? 250 : 196;
+    var bw = 920, bh = big ? 222 : 174;
     ui.panel(ctx, -bw / 2, -bh / 2, bw, bh, { r: 36, fill: big ? 'rgba(70,16,90,0.94)' : 'rgba(28,12,48,0.92)', border: '#ffd166', lineWidth: 6 });
     var ar = big ? 76 : 62;
     ui.avatar(ctx, bn.u, -bw / 2 + ar + 28, 0, ar, { ring: '#ffd166', ringWidth: 6 });
@@ -1129,8 +1192,13 @@
       ctx.restore();
     }
     if (banner) drawBanner(ctx, banner, t);
-    if (S.st !== 'result' && S.st !== 'sweep') drawNote(ctx);
-    ui.hintBar(ctx, 170, L.hintY, 740, T.hints, { h: L.hintH, size: 36 });
+    if (S.st !== 'result' && S.st !== 'sweep') { drawIdle(ctx, t); drawNote(ctx); }
+    if (!showQueue()) ui.hintBar(ctx, 170, L.hintY, 740, S.guessOpen ? T.hints : HINTS_NOGUESS, { h: L.hintH, size: 36 });
+  }
+  // tahminler kapanınca "Sayı yaz" ipucu dönmesin
+  var HINTS_NOGUESS = T.hints.filter(function (h) { return h.indexOf('🔢') < 0; });
+  function showQueue() {
+    return S.queue.length > 0 && S.qNames.length > 0 && (S.st === 'intro' || S.st === 'result' || S.st === 'sweep' || S.st === 'leave');
   }
 
   function render(ctx, t) {
@@ -1147,6 +1215,7 @@
     var tnow = now();
     for (var i = 0; i < splats.length; i++) A.drawSplat(ctx, splats[i], tnow);
     if (S.st === 'result' || S.st === 'sweep') { drawResult(ctx, t); drawNote(ctx); }
+    if (showQueue()) drawQueueBar(ctx, t);
     if (S.st === 'freeze') A.drawComic(ctx, G.cx, G.cy - 30, S.F.word, 0.3 + 0.75 * ease.outBack(clamp(S.t / 0.16, 0, 1)), t, S.F.outline === '#123d14' ? '#d61f3c' : null);
     else if (S.st === 'boom' && S.t < 1.1) {
       ctx.save(); ctx.globalAlpha = clamp((1.1 - S.t) / 0.4, 0, 1);

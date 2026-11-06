@@ -18,7 +18,7 @@
     levels: ['RAHAT 😌', 'GERİLİYOR 😬', 'ÇATIRDIYOR! 😰', 'HER AN PATLAYABİLİR! 😱'],
     burstLevel: 'PATLADI! 💥',
     lastTitle: 'SON LASTİK',
-    heroesTitle: 'KAHRAMAN',
+    heroesTitle: 'KAHRAMANLAR',
     emptyList: 'İlk sen ol!',
     hints: [
       '💬 Yorum yaz → lastik tak',
@@ -58,6 +58,8 @@
     cleaning: 'Temizlik! 🧹',
     next: 'Sıradaki: {f}',
     giftBands: '{gift} → +{n} lastik',
+    crowd: '👥 {n} kişi lastik taktı · Sen de yaz! 💬',
+    queueLine: '🎗️ Sıradaki meyveye: {names}',
   };
 
   var EN_TEXT = {
@@ -111,6 +113,8 @@
     cleaning: 'Clean up! 🧹',
     next: 'Next: {f}',
     giftBands: '{gift} → +{n} bands',
+    crowd: '👥 {n} people added a band · Comment to join! 💬',
+    queueLine: '🎗️ Next fruit: {names}',
   };
 
   KP.T = EN ? EN_TEXT : TR_TEXT;

@@ -18,6 +18,7 @@
   var W = LG.W, TAU = Math.PI * 2;
   ui.celebrateEnabled = false;            // hediye kutlamalarını oyun kendisi çiziyor
   ui.toastPos = { x: LG.SAFE.x + 10, y: 1150 };
+  ui.toastsEnabled = false;               // ortak bildirimler koridordaki çocukların üstüne düşüyordu; oyun kendi akışını (feed) kullanır
 
   var CFG = {
     roundLen: LG.clamp(LG.qn('tur', 150), 45, 600),
@@ -634,7 +635,14 @@
   var lastJoinFeed = -9;
   function feed(icon, text, color) {
     feedArr.unshift({ icon: icon, text: text, color: color || '#fff', t: 0, w: 0 });
-    if (feedArr.length > 4) feedArr.length = 4;
+    if (feedArr.length > 3) feedArr.length = 3;
+  }
+  // Aynı türden art arda gelen satırları birleştir: "Ayşe +4 kişi 🛡️ yastık aldı"
+  function feedGroup(key, icon, name, one, many, color) {
+    var f = feedArr[0];
+    if (f && f.key === key && f.t < 2.5) { f.n++; f.text = f.first + ' +' + f.n + many; f.t = 0.2; f.w = 0; return; }
+    feed(icon, name + one, color);
+    feedArr[0].key = key; feedArr[0].n = 0; feedArr[0].first = name;
   }
   function feedJoin(u) {
     var f = feedArr[0];
@@ -710,17 +718,19 @@
     }
     if (k.likeAcc > 40) k.likeAcc = 40;
   });
+  // Oturumda çok cömert davranan izleyiciye (ortak "softcap") sade ama sıcak bir teşekkür — kendi akışımızda
+  LG.on('softcap', function (e) { if (e && e.user) feed('👑', e.user.name + ', efsanesin! Çok teşekkürler 💖', '#ffd166'); });
   LG.on('follow', function (e) {
     if (!e.user) return;
     var k = ensureKid(e.user, true);
-    feed('➕', e.user.name + ' takip etti, sağ ol! 💚', '#7dffb0');
+    feedGroup('follow', '➕', e.user.name, ' takip etti 💚', ' kişi takip etti 💚', '#7dffb0');
     k.glowT = 2;
     LG.sfx('heart');
   });
   LG.on('share', function (e) {
     if (!e.user) return;
     ensureKid(e.user, true);
-    feed('↗️', e.user.name + ' paylaştı, sağ ol! 💙', '#9bd8ff');
+    feedGroup('share', '↗️', e.user.name, ' paylaştı 💙', ' kişi paylaştı 💙', '#9bd8ff');
     LG.sfx('heart');
   });
   LG.on('gift', function (e) {
@@ -731,12 +741,12 @@
     k.pillow = Math.min(3, k.pillow + 1);   // kozmetik yastık kalkanı: bir sonraki terliği savuşturur
     var gem = LG.giftEmoji(g);
     if (S.phase !== 'play') {
-      feed(gem, u.name + ' — çok teşekkürler! 💖', '#ffd166'); LG.sfx('coin');
+      feed(gem, u.name + ' — teşekkürler! 💖', '#ffd166'); LG.sfx('coin');
       return;
     }
     var bigOk = tier >= 3 ? ui.spotlightAllowed(u, tier) : true;
     if (tier <= 1) {
-      feed(gem, u.name + ' → 🛡️ yastık kalkanı aldı!', '#d7c8ff');
+      feedGroup('pillow', gem, u.name, ' → 🛡️ yastık kalkanı!', ' kişi 🛡️ yastık aldı', '#d7c8ff');
       if (k.vis) ui.float('🛡️', k.x, k.y - 130 * k.s, { size: 40, life: 1.2 });
       LG.sfx('pop');
       return;
@@ -1169,7 +1179,8 @@
     ui.emoji(ctx, '👵', 34, 700 + bob, 64);
     ui.emoji(ctx, '🧕', 92, 712 - bob, 56);
     if (md.guestLine && md.guestLineT < 2.0) {
-      A.bubble(ctx, 210, 610, md.guestLine, { size: 30, maxW: 380, tx: 70, ty: 660, alpha: Math.min(1, md.guestLineT / 0.15, (2 - md.guestLineT) / 0.25) });
+      // tahtanın (liderlik) altına, teyzelerin hemen sağına: tahtayı kapatmasın
+      A.bubble(ctx, 132, 668, md.guestLine, { size: 27, maxW: 420, align: 'left', tx: 104, ty: 690, alpha: Math.min(1, md.guestLineT / 0.15, (2 - md.guestLineT) / 0.25) });
     }
   }
   function drawCat(ctx, front) {
@@ -1357,12 +1368,13 @@
     for (var i = 0; i < feedArr.length; i++) {
       var f = feedArr[i];
       var a = Math.min(1, f.t / 0.2, (5.5 - f.t) / 0.5);
-      if (!f.w) { ctx.font = ui.font(27, 800); f.w = Math.min(400, ctx.measureText(f.text).width + 64); }
-      var y = 792 + i * 48;
+      // dar ve koridorun sol üst duvarına yaslı: ilerleyen çocuklar sağa/ortaya kaydığı için oyunu kapatmaz
+      if (!f.w) { ctx.font = ui.font(25, 800); f.w = Math.min(340, ctx.measureText(f.text).width + 60); }
+      var y = 780 + i * 42;
       ctx.save(); ctx.globalAlpha = Math.max(0, a);
-      ui.panel(ctx, 40, y - 21, f.w, 42, { r: 21, fill: 'rgba(10,6,28,0.78)', border: false });
-      ui.emoji(ctx, f.icon, 63, y, 26);
-      ui.text(ctx, f.text, 82, y + 1, { size: 27, align: 'left', color: f.color, maxWidth: f.w - 64, strokeWidth: 3 });
+      ui.panel(ctx, 40, y - 19, f.w, 38, { r: 19, fill: 'rgba(10,6,28,0.8)', border: false });
+      ui.emoji(ctx, f.icon, 61, y, 24);
+      ui.text(ctx, f.text, 79, y + 1, { size: 25, align: 'left', color: f.color, maxWidth: f.w - 58, strokeWidth: 3 });
       ctx.restore();
     }
   }

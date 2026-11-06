@@ -771,7 +771,7 @@
   function tier3(u, gname) {
     var canBonus = bonusQ.length < 2 && bonusQ.indexOf(u) < 0;
     var cur = S.phase === 'task' || S.phase === 'reveal';
-    var canExtra = (cur ? S.extraAdded : pendingExtra) < 120;
+    var canExtra = (cur ? S.extraAdded : pendingExtra) < 60;     // hediyeyle en fazla +60 sn (görev uzayıp gitmesin)
     if (canBonus && (!canExtra || Math.random() < 0.5)) {
       bonusQ.push(u);
       toast('BONUS GÖREV sıraya eklendi · ' + u.name + ' — teşekkürler!', { icon: '⭐', color: '#ffd166', life: 4.5 });

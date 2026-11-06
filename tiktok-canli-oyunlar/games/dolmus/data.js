@@ -32,11 +32,11 @@
     'Şoför bey, müsait bir yerde!', 'Biraz sıkışırsak bir kişi daha sığar', 'Kim simit yiyor?', 'Pencereyi açar mısın?',
     'Sonraki durakta uyandırın beni', 'Hafif sola kayalım', 'Bu dolmuş nereye gidiyor?', 'Para üstü gelmedi!',
     'Abi müziği aç!', 'Çantamı tutar mısın?', 'Yer var mı yer?', 'Oğlum otur şuraya', 'Ben burada doğdum sanki',
-    'Şoför bey, kemerimi bulamıyorum', 'Biri benim kolumu gördü mü?', 'Kucağıma otur abla', 'Bu yol kısa değil mi?',
+    'Şoför bey, kemerimi bulamıyorum', 'Biri benim kolumu gördü mü?', 'Çocuğu kucağıma alayım', 'Bu yol kısa değil mi?',
   ];
   D.DRIVER = ['Arkaya doğru ilerleyelim!', 'Boş yer var, boş!', 'Bir kişi daha alırız!', 'Sıkışın biraz!', 'Tek kişilik yer var!', 'Kapıyı itin, kapıyı!'];
   D.DRIVER_FULL = ['Bir kişi daha alırız, sorun yok!', 'Daha çok yer var!', 'Tavan da koltuk sayılır!', 'Sıkışın, sıkışın!'];
-  D.FAST = ['Yavaş ol şoför bey!', 'Aman şoför bey!', 'Uçuyoruz!', 'Şoför bey, yarışta mıyız?', 'Midem kalktı!', 'Bu dolmuş F1 mi?!'];
+  D.FAST = ['Yavaş ol şoför bey!', 'Aman şoför bey!', 'Uçuyoruz!', 'Şoför bey, yarışta mıyız?', 'Midem kalktı!', 'Bu dolmuş yarış arabası mı?!'];
   D.KLIMA = ['Oh be! 😌', 'Cereyan yapıyor, kapat!', 'Saçım bozuldu!', 'Oh mis gibi!', 'Kapat şu camı, üşüdüm!'];
   D.MUSIC = ['Aç sonuna kadar! 🎶', 'Ah bu şarkı… 😭', 'Bu benim şarkım!', 'Kısık sesle olsun!'];
   D.SLOW = ['Oh, sakin sakin…', 'Yürüsek daha hızlı 😅', 'Kaplumbağa geçti bizi'];

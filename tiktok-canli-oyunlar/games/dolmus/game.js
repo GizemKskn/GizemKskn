@@ -74,7 +74,7 @@
   var G = {
     state: 'stopped', st: 0, phase: 'open', pt: 0,
     routeIdx: 0, palIdx: 0, route: null, pal: null, stopIdx: 0,
-    seg: 0, v: 0, v0: 0, brakeT: 1.6, brakeDist: 0, speedMul: 1, likeHeat: 0, kwBoost: 0,
+    seg: 0, stopN: 0, v: 0, v0: 0, brakeT: 1.6, brakeDist: 0, speedMul: 1, likeHeat: 0, kwBoost: 0,
     scroll: 0, door: 0, doorAjar: 0, winOpen: 0, klimaT: 0, musicT: 0,
     leaveList: [], leaveAcc: 0, boardAcc: 0, forceGo: false, skipToEnd: false,
     lastEmerg: -99, lastHonk: -99, chatterT: 7, fastT: 3, hatT: 1,
@@ -108,13 +108,13 @@
   function toast(key, name, one, many, icon, color) {
     for (var i = 0; i < toasts.length; i++) {
       var o = toasts[i];
-      if (o.key === key && key && o.t < 3) {
+      if (o.key === key && key && o.t < 3 && o.n < 5 && LG.time - o.born < 5) {
         o.n++; o.name = name; o.t = Math.min(o.t, 0.25); o.w = 0;
         o.text = name + ' ve ' + (o.n - 1) + ' kişi daha ' + many;
         return;
       }
     }
-    toasts.unshift({ key: key, name: name, n: 1, text: one ? name + ' ' + one : name, icon: icon, color: color, t: 0, life: 3.4 });
+    toasts.unshift({ key: key, name: name, n: 1, text: one ? name + ' ' + one : name, icon: icon, color: color, t: 0, life: 3.4, born: LG.time });
     if (toasts.length > 2) toasts.length = 2;
   }
   function drawToasts(ctx) {
@@ -146,7 +146,7 @@
     BT.tx = bus.x + bus.dx; BT.ty = bus.y - bus.alt + bus.bounce;
     BT.px = -235 * bus.wheelieW; BT.py = 0;
     BT.rot = bus.pitch + bus.extraRot;
-    var fsc = 1 - 0.16 * flyK; // uçarken biraz küçülür: şehrin üstünde yükseliyor hissi
+    var fsc = 1 - 0.2 * flyK; // uçarken biraz küçülür: şehrin üstünde yükseliyor hissi
     BT.sx = (1 + 0.08 * f + wob) * (1 + bus.sq) * fsc;
     BT.sy = (1 + 0.14 * f - wob) * (1 - bus.sq) * fsc;
     BT.cos = Math.cos(BT.rot); BT.sin = Math.sin(BT.rot);
@@ -189,7 +189,7 @@
   function isInside(p) { return p.slot && p.slot.inside; }
   function makePassenger(u) {
     var p = {
-      u: u, seq: ++G.seq, boardStop: G.stopIdx, dest: G.stopIdx + LG.randi(3, 7), wantOff: false,
+      u: u, seq: ++G.seq, boardStop: G.stopIdx, boardN: G.stopN, dest: G.stopIdx + LG.randi(3, 7), wantOff: false,
       slot: null, dx: A.BUS.doorC.x, dy: -90, tagT: 8, handT: 0, act: LG.time, phase: Math.random() * TAU,
       hop: false, k: (LG.hash(u.id) % 100) / 100, born: LG.time,
     };
@@ -215,7 +215,7 @@
     if (i >= 0) aboard.splice(i, 1);
     byUser.delete(p.u.id);
     slotsDirty = true;
-    var ride = Math.max(0, G.stopIdx - p.boardStop);
+    var ride = Math.max(0, G.stopN - p.boardN); // gerçekten geçilen durak sayısı (B ile atlanan duraklar sayılmaz)
     if (ride > 0 && (!stats.longest || ride >= stats.longest.n)) stats.longest = { u: p.u, n: ride };
   }
 
@@ -361,7 +361,8 @@
     LG.sfx('whoosh');
   }
   function emergency(byHost) {
-    if (G.state !== 'drive' && G.state !== 'depart') {
+    // havadayken / uzaydayken / turboda gerçek fren yok: sadece sarsıntı + laf (yolcu havada inmesin)
+    if ((G.state !== 'drive' && G.state !== 'depart') || fx.flight || fx.rocket || fx.turbo || bus.alt > 2) {
       if (byHost) { bus.lurchV += 260; bus.pitchV += 0.6; ui.shake(6, 0.25); sayDriver('Bi dakka!', { prio: true, life: 1.5 }); }
       return;
     }
@@ -517,7 +518,7 @@
 
   LG.on('follow', function (e) {
     if (!e.user) return;
-    toast('follow', e.user.name, 'abonman kart aldı', 'abonman kart aldı', '💳', '#06d6a0');
+    toast('follow', e.user.name, 'abonman kartı aldı', 'abonman kartı aldı', '💳', '#06d6a0');
     LG.sfx('heart');
     var p = byUser.get(e.user.id);
     if (p) sayP(p, 'Abonman kartım var! 💳', { life: 2.2 });
@@ -681,7 +682,7 @@
       moment(55, u.name + " TURBO'ya bastı, dolmuş şaha kalktı! 🔥");
     } else if (job.type === 'flight') {
       fx.flight = { t: 0, dur: 10, u: u };
-      bigText('DOLMUŞ UÇUYOR! 🕊️', u.name + ' sayesinde', '#bde0fe', 3, 96, 1150);
+      bigText('DOLMUŞ UÇUYOR! 🕊️', u.name + ' sayesinde', '#bde0fe', 3, 96, 1112);
       LG.sfx('mega'); ui.flash('#fff6d0', 0.25); ui.shake(14, 0.5);
       LG.music.play('race');
       moment(90, u.name + ' sayesinde dolmuş kanatlanıp uçtu! 🕊️');
@@ -749,7 +750,7 @@
         G.signX = STOP_X + G.brakeDist * (1 - bk) * (1 - bk);
         if (bk >= 1) {
           G.v = 0; G.seg = 0;
-          G.stopIdx = G.nextStopIdx;
+          G.stopIdx = G.nextStopIdx; G.stopN++;
           bus.sqV += 1.6; bus.lurchV += 80;
           LG.sfx('drum');
           if (G.stopIdx >= lastStop()) startStopState('final'); else startStopState('stopped');
@@ -993,7 +994,7 @@
       var fk = F.t / F.dur;
       var up = fk < 0.15 ? LG.ease.inOutSine(fk / 0.15) : fk > 0.85 ? LG.ease.inOutSine((1 - fk) / 0.15) : 1;
       flyK = up;
-      altTarget = 250 * up + Math.sin(F.t * 2.2) * 16 * up;
+      altTarget = 200 * up + Math.sin(F.t * 2.2) * 14 * up;
       bus.extraRot = -0.06 * up + Math.sin(F.t * 1.7) * 0.03 * up;
       if (Math.random() < dt * 5) { toWorld(rand(-300, 200), -300, tmp); ui.burst(tmp.x, tmp.y, { count: 1, shape: 'emoji', emoji: LG.pick(['✨', '⭐', '💫']), speed: 120, gravity: 120, size: 14, life: 1.8 }); }
       if (F.t >= F.dur) {
@@ -1798,6 +1799,12 @@
   LG.sim.genComment = function (u) {
     if (byUser.has(u.id) && Math.random() < 0.35) return pick(D.SIM_ABOARD);
     return null;
+  };
+
+  // Test/hata ayıklama için salt-okunur durum özeti
+  window.__dolmus = function () {
+    return { state: G.state, phase: G.phase, stopIdx: G.stopIdx, stopN: G.stopN, aboard: aboard.length, crowd: crowd.length, hidden: hiddenCount,
+      bubbles: bubbles.length, passes: passes.length, big: bigQueue.length, fx: fx.turbo ? 'turbo' : fx.flight ? 'flight' : fx.rocket ? 'rocket' : '', route: G.routeIdx, alt: Math.round(bus.alt), kmh: Math.round(G.kmh) };
   };
 
   // ---------------------------------------------------------------------------

@@ -454,7 +454,7 @@
     if (!d.greeted) {
       d.greeted = true;
       if (c.lvl >= 2) {
-        sayW(cayci, 'Ooo ' + u.name + ' gelmiş! Başköşeye buyur! 👑', 3.2, true);
+        sayW(cayci, 'Ooo ' + u.name + '! Başköşeye buyur 👑', 3.2, true);
         sayCust(c, titleOf(d.rec) + ' geldi! 👑', 3.5, { name: u.name, bg: '#fff2c4' });
       } else if (c.lvl === 1) {
         sayW(cayci, 'Hoş geldin ' + u.name + '! Her zamankinden mi? 😄', 3, true);
@@ -1378,6 +1378,8 @@
     if (LG.cmd.has(text, D.WORDS.hesap)) {
       var lc = byId.get(u.id);
       if (lc) payAndLeave(lc);
+      var qi = doorQ.indexOf(u);
+      if (qi >= 0) doorQ.splice(qi, 1); // kapıda bekliyorsa sıradan çıkar
       return;
     }
     var def = findOrder(text);
@@ -1716,8 +1718,9 @@
 
     // şerit + kartlar
     if (ribGap > 0) ribGap -= dt;
-    if (!rib && ribQ.length && (ribGap <= 0 || ribQ.length > 1 || ribQ[0].big)) { rib = ribQ.shift(); rib.t = 0; if (ribQ.length > 3) rib.dur *= 0.6; }
-    if (rib) { rib.t += dt; if (rib.t >= rib.dur) { rib = null; ribGap = ribQ.length ? 0.25 : 1.6; } }
+    // Şeritler arasında kısa boşluk: yoğun hediyede bile ipucu şeridi ara ara görünsün
+    if (!rib && ribQ.length && (ribGap <= 0 || ribQ.length > 4 || ribQ[0].big)) { rib = ribQ.shift(); rib.t = 0; if (ribQ.length > 3) rib.dur *= 0.6; }
+    if (rib) { rib.t += dt; if (rib.t >= rib.dur) { rib = null; ribGap = ribQ.length > 4 ? 0.2 : 1.2; } }
     if (!card && cardQ.length) { card = cardQ.shift(); card.t = 0; }
     if (card) { card.t += dt; if (card.t >= card.dur) card = null; }
 
@@ -1857,11 +1860,6 @@
     if (k < 1) return;
     if (tav) A.tavla(g, t.x, t.y - 4, 1.3);
     drawItems(g, t);
-    if (t.vip) {
-      var vt = t.vip;
-      if (!vt.tagU) vt.tagU = { id: 'vip#' + vt.user.id, name: vt.label };
-      ui.drawNameTag(g, vt.tagU, t.x, t.y + 26, 18, '#3a2000', '#ffd54a');
-    }
   }
   function drawEmptyBack(g, s) { A.drawChairBack(g, s.x, s.t.y - 14, 1.15); }
   function drawWalker(g, w) {
@@ -2014,6 +2012,17 @@
     } else g.drawImage(b.c, bx, by);
   }
   var TAG_MAX = 28, TAGSORT = [], tagTimer = 0;
+  // İsim etiketi ekran kenarından taşmasın
+  function clampTagX(cv, x) { var hw = cv.width / 2; return clamp(x, 8 + hw, W - 8 - hw); }
+  function tagAt(g, u, x, y, size, col, bg) {
+    var cv = ui.nameTag(u, size, col, bg);
+    g.drawImage(cv, Math.round(clampTagX(cv, x) - cv.width / 2), Math.round(y - cv.height / 2));
+  }
+  function vipAbove(t) {
+    if (t.r === 0) return false;
+    for (var i = 0; i < tables.length; i++) { var q = tables[i]; if (q.vip && q.r === t.r - 1 && q.col === t.col) return true; }
+    return false;
+  }
   // --- balon çakışma önleme (kalabalıkta okunaklılık) ---
   var PLACED = [], bubFrame = 0;
   function bubRect(b, x, y) { return { x: clamp(x - b.ax, 6, W - 6 - b.w), y: y - b.ay, w: b.w, h: b.h - 10 }; }
@@ -2114,9 +2123,18 @@
       var active = LG.time - c.activeT < 3 && c.leaving < 0;
       if (active) continue;
       g.globalAlpha = an.a;
-      ui.drawNameTag(g, c.tag, ap.tx, ap.tag + an.dy, 19, st[0], st[1]);
+      if (c.seat.side === 'back' && vipAbove(c.seat.t)) continue; // altın masa tabelası bu adın yerinde
+      tagAt(g, c.tag, ap.tx, ap.tag + an.dy, 19, st[0], st[1]);
     }
     g.globalAlpha = 1;
+    // altın (VIP) masa tabelaları
+    for (i = 0; i < tables.length; i++) {
+      var vtb = tables[i];
+      if (!vtb.vip || !vtb.shown || vtb.showT < 0.5) continue;
+      var vt = vtb.vip;
+      if (!vt.tagU) vt.tagU = { id: 'vip#' + vt.user.id, name: vt.label };
+      tagAt(g, vt.tagU, vtb.x, vtb.y + 27, 19, '#3a2000', '#ffd54a');
+    }
     // sipariş balonları (4 sn sonra küçük simgeye döner)
     for (i = 0; i < custs.length; i++) {
       c = custs[i];
@@ -2133,8 +2151,8 @@
       if (LG.time - c.activeT >= 3 || c.leaving >= 0 || LG.time < c.born || (c._bsF === bubFrame && c.seat.side === 'back')) continue;
       var a3 = anchorOf(c), st3 = tagStyle(c);
       var ak = LG.time - c.activeT, asc = ak < 0.25 ? 0.6 + 0.4 * LG.ease.outBack(ak / 0.25) : 1;
-      if (asc !== 1) { g.save(); g.translate(a3.tx, a3.tag); g.scale(asc, asc); ui.drawNameTag(g, c.tagA || c.tag, 0, 0, 25, st3[0], st3[1]); g.restore(); }
-      else ui.drawNameTag(g, c.tagA || c.tag, a3.tx, a3.tag, 25, st3[0], st3[1]);
+      if (asc !== 1) { var acv = ui.nameTag(c.tagA || c.tag, 25, st3[0], st3[1]); g.save(); g.translate(clampTagX(acv, a3.tx), a3.tag); g.scale(asc, asc); g.drawImage(acv, -acv.width / 2, -acv.height / 2); g.restore(); }
+      else tagAt(g, c.tagA || c.tag, a3.tx, a3.tag, 25, st3[0], st3[1]);
     }
     drawDoorQueue(g, t);
     // konuşma balonları (yeni olan üstte)
