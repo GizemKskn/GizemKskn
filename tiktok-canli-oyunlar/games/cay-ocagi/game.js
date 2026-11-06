@@ -54,6 +54,7 @@
     // Eller kamerası üstteyse başlığı ve göstergeleri kameradan uzaklaştır
     GAUGE.on = false; PILL.on = false;
     PLAQUE.x = CAM.x > W / 2 ? 372 : 708;
+    LIKEBAR.x = PLAQUE.x - LIKEBAR.w / 2;
     if (CAM.x > W / 2) BOARD_ALT = { x: 54, y: 414, w: 498, h: 186 };
   }
 
@@ -363,12 +364,21 @@
     refreshTag(c);
     return c;
   }
+  function shortTitle(c) {
+    if (c.npc || c.lvl < 1) return '';
+    if (c.lvl === 1) return 'Müdavim';
+    var r = c.user.data.cay && c.user.data.cay.rec;
+    return r && r.p === 'abla' ? 'Kahvehanenin Ablası' : r && r.p === 'aga' ? 'Kahvehanenin Ağası' : 'Ağa/Abla';
+  }
   function refreshTag(c) {
     var pre = c.npc ? '' : c.vip ? '🌟 ' : c.lvl >= 2 ? '👑 ' : c.lvl >= 1 ? '☕ ' : '';
-    var key = pre + '|' + c.user.name;
+    var st = shortTitle(c);
+    var key = pre + '|' + c.user.name + '|' + st;
     if (key === c.tagKey) return;
     c.tagKey = key;
     c.tag = { id: c.user.id + '#' + pre, name: pre + shortName(c.user.name, 10) };
+    // konuşurken/sipariş verirken unvan da görünür: "☕ ayse · Müdavim"
+    c.tagA = st ? { id: c.user.id + '#a' + pre + st, name: pre + shortName(c.user.name, 12) + ' · ' + st } : c.tag;
   }
   function tagStyle(c) {
     if (c.npc) return ['#ffe9c4', 'rgba(70,40,20,0.88)'];
@@ -1318,7 +1328,11 @@
     if (!isSimUser(u)) dirty = true;
     act(u, 'c');
     var text = e.raw || '';
-    if (before >= 2 && LG.cmd.has(text, BEN_WORDS)) r.p = LG.cmd.has(text, ['ben ablayım', 'ben ablayim', 'ben abla']) ? 'abla' : 'aga';
+    if (before >= 2 && LG.cmd.has(text, BEN_WORDS)) {
+      r.p = LG.cmd.has(text, ['ben ablayım', 'ben ablayim', 'ben abla']) ? 'abla' : 'aga';
+      var pc = byId.get(u.id);
+      if (pc) refreshTag(pc);
+    }
     if (topic.st === 'vote') tryVote(u, text);
 
     if (LG.cmd.has(text, D.WORDS.hesap)) {
@@ -2027,7 +2041,7 @@
       c = custs[i];
       if (LG.time - c.activeT >= 3 || c.leaving >= 0 || LG.time < c.born || (c.bub && c.seat.side === 'back')) continue;
       var a3 = anchorOf(c), st3 = tagStyle(c);
-      ui.drawNameTag(g, c.tag, a3.x, a3.tag, 23, st3[0], st3[1]);
+      ui.drawNameTag(g, c.tagA || c.tag, a3.x, a3.tag, 23, st3[0], st3[1]);
     }
     // konuşma balonları (yeni olan üstte)
     for (i = 0; i < chatList.length; i++) {
@@ -2292,10 +2306,12 @@
     drawBulbs(ctx, t);
     drawCounterArea(ctx, t);
     drawWorld(ctx);
-    drawBoard(ctx, t);
+    var topicOn = topic.st !== 'idle';
+    if (!topicOn) drawBoard(ctx, t);
     drawSteam(ctx);
     drawRockets(ctx);
     drawTop(ctx, t);
+    if (topicOn) drawBoard(ctx, t); // sohbet sırasında tahta her şeyin önünde okunur
     drawPlaque(ctx, t);
     drawGauge(ctx, t);
     drawPill(ctx);

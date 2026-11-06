@@ -80,5 +80,5 @@
     ['arkaya ilerleyin', 1], ['😂😂😂', 2], ['bostancı geçiyor mu?', 1], ['teyze otur', 1], ['kapıyı kapat', 1], ['sıkıştım 😂', 1],
     ['ben camdan bakayım', 1], ['ilk kez dolmuşa biniyorum', 1], ['bu ne kalabalık', 1],
   ];
-  D.SIM_ABOARD = ['inecek var', 'müsait bir yerde', 'inecek', 'durakta inecek', 'klima', 'müzik', 'şoför bey hızlı gidiyoruz', 'sıkıştım', 'korna', 'yavaş'];
+  D.SIM_ABOARD = ['inecek var', 'müsait bir yerde', 'inecek', 'durakta inecek', 'klima', 'müzik', 'şoför bey yavaş git', 'sıkıştım', 'korna', 'yavaş'];
 })();

@@ -1585,7 +1585,9 @@
     for (var j = tlane.length - 1; j >= 0; j--) { tlane[j].t += dt; if (tlane[j].t > tlane[j].life) tlane.splice(j, 1); }
 
     // hediye afişleri
-    if (!banner && banners.length) { banner = banners.shift(); banner.t = 0; startBanner(banner); }
+    // büyük anlarla çakışmasın: "seçildi" kartı ve sonuç damgası sırasında afiş bekler
+    var busy = S.phase === 'reveal' || (S.phase === 'result' && S.t < 2.6);
+    if (!banner && banners.length && !busy) { banner = banners.shift(); banner.t = 0; startBanner(banner); }
     if (banner) { banner.t += dt; if (banner.t >= banner.dur) banner = null; }
     // havai fişek çerçeve
     if (fireworksT > 0) {

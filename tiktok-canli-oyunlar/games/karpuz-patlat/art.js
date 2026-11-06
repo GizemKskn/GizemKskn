@@ -721,15 +721,18 @@
   // Silecek (temizlik)
   // ---------------------------------------------------------------------------
   A.drawWiper = function (ctx, x, t) {
+    // camı silen bez: parlak, hafif eğik ışık şeridi + sünger
     ctx.save();
-    var g = ctx.createLinearGradient(x - 40, 0, x + 16, 0);
-    g.addColorStop(0, 'rgba(180,230,255,0)'); g.addColorStop(1, 'rgba(180,230,255,0.35)');
-    ctx.fillStyle = g; ctx.fillRect(x - 40, 0, 56, H);
-    ctx.fillStyle = '#2b2f36'; ctx.fillRect(x + 6, 0, 16, H);
-    ctx.fillStyle = '#58606b'; ctx.fillRect(x + 22, 0, 10, H);
+    ctx.translate(x, 0); ctx.transform(1, 0, -0.18, 1, 0, 0);
+    var g = ctx.createLinearGradient(-150, 0, 40, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.65, 'rgba(255,255,255,0.28)'); g.addColorStop(0.9, 'rgba(220,245,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(-150, 0, 190, H);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    for (var i = 0; i < 6; i++) ctx.fillRect(-120 + i * 18, 0, 3, H);
     ctx.restore();
+    ui.emoji(ctx, '🧽', x - 10 + sin(t * 22) * 8, 760 + sin(t * 11) * 120, 150);
     ctx.save();
-    ctx.translate(x - 30, 1110 + sin(t * 30) * 6); ctx.rotate(-0.5 + sin(t * 18) * 0.15);
+    ctx.translate(x - 40, 1120 + sin(t * 30) * 6); ctx.rotate(-0.5 + sin(t * 18) * 0.15);
     ui.emoji(ctx, '🧹', 0, 0, 170);
     ctx.restore();
   };

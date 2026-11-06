@@ -192,6 +192,8 @@
   function say(owner, text, o) {
     o = o || {};
     if (!text) return null;
+    var st = shortText(text, 28);
+    for (var d = 0; d < bubbles.length; d++) if (bubbles[d].text === st && bubbles[d].t < 1.6) return null; // aynı lafı tekrarlama
     for (var i = bubbles.length - 1; i >= 0; i--) {
       if (bubbles[i].owner === owner || (owner.p && bubbles[i].owner.p === owner.p) || (owner.c && bubbles[i].owner.c === owner.c)) bubbles.splice(i, 1);
     }
@@ -362,7 +364,7 @@
       G.offReq.push(LG.time);
       var cut = LG.time - 4;
       while (G.offReq.length && G.offReq[0] < cut) G.offReq.shift();
-      if (G.offReq.length >= 5 && (G.state === 'drive' || G.state === 'depart') && LG.time - G.lastEmerg > 28 && !fx.flight && !fx.rocket) emergency(false);
+      if (G.offReq.length >= 5 && (G.state === 'drive' || G.state === 'depart') && LG.time - G.lastEmerg > 28 && !fx.flight && !fx.rocket && !fx.turbo) emergency(false);
     }
     return true;
   }
@@ -667,7 +669,7 @@
         G.v += (BASE_V * G.speedMul - G.v) * Math.min(1, dt * 2.2);
         G.seg += dt * (0.7 + 0.3 * Math.min(G.speedMul, 2.5));
         G.signX = STOP_X - (G.scroll - G.signScroll0);
-        if ((G.seg >= SEG_TIME || G.brakeNow) && !fx.flight && !fx.rocket && bus.alt < 2) { G.brakeNow = false; startBrake(); }
+        if ((G.seg >= SEG_TIME || G.brakeNow) && !fx.flight && !fx.rocket && !fx.turbo && bus.alt < 2) { G.brakeNow = false; startBrake(); }
         break;
       case 'brake':
         var bk = Math.min(1, G.st / G.brakeT);
@@ -803,6 +805,7 @@
       }
     }
     if (G.kmh > 85 && G.state === 'drive') {
+      if (!G.wasFast) { G.wasFast = true; G.fastT = Math.min(G.fastT, 0.4); }
       G.fastT -= dt;
       if (G.fastT <= 0) { G.fastT = rand(3.5, 6); var fp = randomInside(); if (fp) sayP(fp, pick(D.FAST), { life: 2.2, bg: '#fff0f0' }); }
       G.hatT -= dt;
@@ -813,6 +816,7 @@
         if (roof.length) { var rp2 = pick(roof); headLocal(rp2, tmp); toWorld(tmp.x, tmp.y, tmp2); ui.burst(tmp2.x, tmp2.y - 10, { count: 1, shape: 'emoji', emoji: pick(['🧢', '👒', '🎩', '🧣']), angle: PI, spread: 0.6, speed: 700, up: 300, gravity: 500, size: 16, life: 1.6 }); }
       }
     }
+    if (G.kmh < 70) G.wasFast = false;
     // çevre
     for (var gi = 0; gi < gulls.length; gi++) {
       var gl = gulls[gi];

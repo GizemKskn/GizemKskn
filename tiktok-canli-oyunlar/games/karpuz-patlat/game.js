@@ -32,6 +32,7 @@
   var MAX_LABELS = 15;      // aynı anda en fazla isim etiketi
   var CHAT_CD = 1.2;        // aynı kişinin yorumla lastik takma aralığı (sn)
   var LIKES_PER_BAND = 15;
+  var MIN_PLAY = max(5, LG.qn('mintur', 40)); // bir meyve en erken bu kadar saniyede patlar (gerilim doruğa yakın bekler)
   var TH_MIN = max(10, LG.qn('minlastik', 40));
   var TH_MAX = max(TH_MIN + 10, LG.qn('maxlastik', 900));
 
@@ -54,7 +55,7 @@
     guesses: new Map(), guessOpen: true,
     board: new LG.Board(),
     recent: [], tease: 0, crackBoost: 0, waist: 0, creakT: 2, res: null, landed: false,
-    p0: 0, u0: 0, freeRound: 0, retargets: 0,
+    p0: 0, u0: 0, freeRound: 0, retargets: 0, hold: false, holdEnd: 0,
   };
   var fruit = { x: 540, rot: 0, sq: 0, sqV: 0, press: 0, ox: 0, oy: 0, visible: true };
   var G = A.G;
@@ -89,7 +90,7 @@
   // Yayın kalabalıksa (yorumlar beklenenden hızlı geliyorsa) tur 2–4 dk sürsün diye eşiği gizlice yükselt
   function retarget() {
     var el = now() - S.playStart;
-    if (el < 8) return;
+    if (el < 8 || S.hold) return;
     var rate = S.freeRound / el;
     var want = rate * max(60, LG.rand(100, 160) - el * 0.5);
     var remain = S.threshold - S.units;
@@ -179,7 +180,11 @@
       if (canFloat(0.25)) { A.knotPos(G, b, b.k, tmpP); ui.float('', tmpP.x, tmpP.y - 10, { emoji: '💥', size: 40, life: 0.9, vy: -160 }); }
     }
     labelT = 0;
-    if (S.units >= S.threshold && S.st === 'play') startCritical(u);
+    if (S.units >= S.threshold && S.st === 'play') {
+      var el = now() - S.playStart;
+      if (el >= MIN_PLAY) startCritical(u);
+      else if (!S.hold) { S.hold = true; S.holdEnd = S.playStart + MIN_PLAY + LG.rand(0.5, 3); } // çok erken: meyve doruğa yakın dayanır
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -223,7 +228,7 @@
     S.fi = (S.fi + 1) % FRUITS.length;
     S.F = FRUITS[S.fi];
     S.bands = []; S.units = 0; S.board.reset(); S.guesses.clear(); S.guessOpen = true;
-    S.threshold = computeThreshold(); S.K = LG.rand(0.85, 0.96); S.p0 = 0; S.u0 = 0; S.freeRound = 0; S.retargets = 0;
+    S.threshold = computeThreshold(); S.K = LG.rand(0.85, 0.96); S.p0 = 0; S.u0 = 0; S.freeRound = 0; S.retargets = 0; S.hold = false;
     S.pv = 0; S.pvT = 0; S.tease = 0; S.crackBoost = 0; S.waist = LG.rand(-0.08, 0.08);
     S.lastUser = null; S.burster = null; S.res = null; S.recent = []; gutVer++;
     cracks = genCracks(); drips = []; puddle = 0; labels = [];
@@ -256,6 +261,11 @@
     S.st = 'critical'; S.t = 0;
     S.burster = u || S.lastUser;
     flushPress();
+    // bekleyen hediye afişleri finali kapatmasın: kısa teşekkür bildirimine dönüşür
+    if (banner && banner.t < 1) banners.unshift(banner);
+    banner = null;
+    for (var i = 0; i < banners.length; i++) note(banners[i].emoji, banners[i].u.name + ' · ' + banners[i].sub, '#ffd166');
+    banners.length = 0;
     LG.sfx('clap'); LG.sfx('zap');
     LG.music.setTempo(1.7);
   }
@@ -527,6 +537,7 @@
         if (S.st !== 'play') break;
         var el = t - S.playStart;
         if ((S.retargets === 0 && el > 15) || (S.retargets === 1 && el > 40)) { S.retargets++; retarget(); }
+        if (S.hold && t >= S.holdEnd) { startCritical(S.lastUser); break; }
         if (el > 210 && S.threshold > S.units + 1) S.threshold = max(S.units + 1, S.threshold - dt * 0.35); // lastik yorgunluğu
         if (S.guessOpen && S.pv >= 0.5) { S.guessOpen = false; note('🎯', T.guessesClosed, '#7dffb0'); LG.sfx('bell'); }
         S.creakT -= dt;
@@ -573,7 +584,10 @@
     }
 
     // --- gerilim (görünen değer gizli eşiği ele vermez)
-    if (S.st === 'play') { var pr = progress(); S.pvT = S.K * (1 - pow(1 - pr, 1.25)); }
+    if (S.st === 'play') {
+      var pr = progress(); S.pvT = S.K * (1 - pow(1 - pr, 1.25));
+      if (S.hold) S.pvT = min(0.97, S.K + 0.01 + 0.05 * clamp((t - S.playStart) / MIN_PLAY, 0, 1));
+    }
     else if (S.st === 'critical' || S.st === 'freeze') S.pvT = 1;
     else if (S.st === 'intro') S.pvT = 0;
     S.pv += (S.pvT - S.pv) * min(1, dt * 3.5);

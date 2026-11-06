@@ -413,7 +413,9 @@
     Q = null;
     setTempo(false);
     var top = rankTop(5, true);
-    podium = { top: top, players: roundPlayers.size, boomed: false, stage: 0 };
+    var tie = false;
+    for (var i = 1; i < Math.min(3, top.length); i++) if (top[i].score === top[i - 1].score) tie = true;
+    podium = { top: top, players: roundPlayers.size, boomed: false, stage: 0, tie: tie };
     LG.music.play('party');
     LG.sfx('drum');
   }
@@ -1650,6 +1652,7 @@
       ui.text(ctx, 'Yeni turda ilk puanı sen kap!', W / 2, 720, { size: 44, color: '#ffe08a' });
     } else {
       ui.text(ctx, 'Tebrikler! 🎉 ' + LG.fmt(podium.players) + ' kişi yarıştı', W / 2, 478, { size: 36, color: '#fff', alpha: clamp((pt - 0.4) / 0.4, 0, 1) });
+      if (podium.tie) ui.text(ctx, '⚖️ Eşit puanda daha hızlı cevaplayan önde', W / 2, 524, { size: 26, color: '#ffe08a', alpha: clamp((pt - 0.8) / 0.4, 0, 1) });
     }
     for (var i = 0; i < PODIUM_SLOTS.length; i++) {
       var ps = PODIUM_SLOTS[i];
