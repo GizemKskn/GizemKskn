@@ -32,6 +32,10 @@
     .alert { display:none; background:var(--gold); color:#222; padding:10px 14px; font-weight:700; text-align:center; }
     .empty { color:var(--mute); text-align:center; padding:20px; }
     kbd { background:#333; border-radius:4px; padding:1px 6px; }
+    .mute { padding:2px 6px; font-size:13px; }
+    .remote { margin-top:10px; }
+    .remote div { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .remote button { font-size:14px; }
   </style>
 </head>
 <body>
@@ -92,7 +96,7 @@
         return '<div class="item" data-greet="' + esc(g.id) + '"><span>' + g.icon + '</span><span class="name">' + esc(g.name) + '</span><span class="meta">' + esc(g.why) + '</span></div>';
       }).join('') : '<div class="empty">Herkes selamlandı 👍</div>';
       $('thanks').innerHTML = thanksQ.length ? thanksQ.slice(0, 60).map(function (g) {
-        return '<div class="item' + (g.coins >= 100 ? ' big' : '') + '" data-thank="' + g.key + '"><span>' + g.icon + '</span><span class="name">' + esc(g.name) + '</span><span>' + esc(g.what) + '</span><span class="meta">' + g.coins + ' jeton</span></div>';
+        return '<div class="item' + (g.coins >= 100 ? ' big' : '') + '" data-thank="' + g.key + '"><span>' + g.icon + '</span><span class="name">' + esc(g.name) + '</span><span>' + esc(g.what) + '</span><span class="meta">' + g.coins + ' jeton</span><button class="mute" data-mute="' + esc(g.uid) + '" title="Bu kişinin büyük ekran kutlamalarını sadeleştir (ör. reşit olmadığını söylerse)">🔇</button></div>';
       }).join('') : '<div class="empty">Teşekkür bekleyen yok</div>';
       var top = Array.from(LG.users.values()).filter(function (u) { return u.coins > 0; }).sort(function (a, b) { return b.coins - a.coins; }).slice(0, 10);
       $('top').innerHTML = top.length ? top.map(function (u, i) {
@@ -143,6 +147,13 @@
       greetQ = greetQ.filter(function (g) { return g.id !== id; }); render();
     });
     $('thanks').addEventListener('click', function (e) {
+      var mb = e.target.closest('[data-mute]');
+      if (mb) {
+        e.stopPropagation();
+        LG.sendControl({ action: 'mute', userId: mb.getAttribute('data-mute') });
+        mb.textContent = '✓'; mb.disabled = true;
+        return;
+      }
       var it = e.target.closest('[data-thank]'); if (!it) return;
       var k = it.getAttribute('data-thank'); thanked.add(k);
       thanksQ = thanksQ.filter(function (g) { return g.key !== k; }); render();
@@ -165,8 +176,14 @@
       var g = games.find(function (x) { return x.id === sel.value; });
       var tips = (g && g.hostTips && g.hostTips.length ? g.hostTips : GENERAL);
       $('tips').innerHTML = '<b>🗣️ Söyleyebileceklerin</b>' + tips.map(function (t) { return '<div class="tip">' + esc(t) + '</div>'; }).join('') +
-        (g && g.keys ? '<div style="margin-top:8px;color:var(--mute)">⌨️ ' + g.keys.map(function (k) { return '<kbd>' + esc(k[0]) + '</kbd> ' + esc(k[1]); }).join(' · ') + '</div>' : '');
+        (g && g.keys ? '<div class="remote"><b>🎮 Oyunu buradan yönet</b> <small>(köprü açıkken çalışır)</small><div>' + g.keys.map(function (k) { return '<button data-key="' + esc(k[0]) + '">' + esc(k[0].toUpperCase()) + ' · ' + esc(k[1]) + '</button>'; }).join('') + '</div></div>' : '');
     }
+    $('tips').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-key]'); if (!b) return;
+      var ok = LG.sendControl({ action: 'key', key: b.getAttribute('data-key'), game: sel.value });
+      b.style.borderColor = ok ? 'var(--green)' : 'var(--red)';
+      setTimeout(function () { b.style.borderColor = ''; }, 600);
+    });
     sel.onchange = function () { LG.store.set('host-game', sel.value); showTips(); };
     showTips();
 

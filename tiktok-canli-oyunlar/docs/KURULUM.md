@@ -93,7 +93,11 @@ Katalogdaki **🎙️ Sunucu paneli** düğmesi ya da `shared/host.html?source=b
 - **Teşekkür et**: hediye gönderenler. Teşekkür et, sonra tıkla.
 - **Yorumlar**: filtreye takılan yorumlar kırmızı görünür.
 - **Söyleyebileceklerin**: seçtiğin oyuna özel hazır cümleler.
+- **🎮 Oyunu buradan yönet**: OBS'teki oyun klavyeden tuş almaz. Paneldeki düğmeler ("N · Yeni tur" gibi) köprü üzerinden oyuna iletilir. Bunun için köprünün açık olması gerekir.
+- **🔇**: bir izleyicinin büyük ekran kutlamalarını sadeleştirir. Örneğin biri reşit olmadığını söylerse ya da kendini kaybetmiş gibi hediye gönderiyorsa kullan.
 - 45 dakikada bir mola hatırlatır. Ayrılırken TikTok'ta yayını **duraklat**.
+
+> Oyunu Chrome'da açıp "Pencere yakalama" ile yayınlıyorsan, Chrome penceresi seçiliyken klavye kısayolları doğrudan da çalışır.
 
 ---
 
@@ -124,3 +128,6 @@ Katalogdaki **🎙️ Sunucu paneli** düğmesi ya da `shared/host.html?source=b
 | `sim` / `demo` | `1` | Simülatör paneli / sahte izleyiciler (sadece test için) |
 | `transparent` | `1` | Arka planı şeffaf yap (oyun destekliyorsa) |
 | `debug` | `1` | FPS ve bağlantı bilgisi göster |
+| `footer` | `0` | "Hediye zorunlu değil" notunu gizle (önerilmez) |
+| `softcap` | `5000` | Bir izleyici bu oturumda bu kadar jetonu geçince büyük kutlamalar sadeleşir (0 = kapalı) |
+| `cooldown` | `25` | Aynı kişiye iki büyük kutlama arasında en az kaç saniye geçsin |

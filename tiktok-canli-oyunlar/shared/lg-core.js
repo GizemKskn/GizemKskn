@@ -60,6 +60,9 @@
     block: (qp('block', '') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean),
     hideStatus: qb('hidestatus', false),
     cam: qp('cam', ''), // eller kamerası çerçevesi: br | bl | tr | tl (boş = kapalı)
+    footer: qb('footer', true), // "Hediye zorunlu değil" notu
+    softcap: qn('softcap', 5000), // bir izleyici bu oturumda bu kadar jetonu geçince kutlamalar sadeleşir (0 = kapalı)
+    spotlightCooldown: qn('cooldown', 25), // aynı kişi için büyük kutlamalar arası en az saniye
   };
   LG.qp = qp; LG.qb = qb; LG.qn = qn;
 
@@ -472,14 +475,48 @@
       setTimeout(self.open, delay);
     };
     this.close = function () { self.closed = true; try { self.ws && self.ws.close(); } catch (e) {} };
+    this.send = function (obj) {
+      if (self.ws && self.alive && self.ws.readyState === 1) { try { self.ws.send(JSON.stringify(obj)); return true; } catch (e) {} }
+      return false;
+    };
   }
+  var sockets = [];
 
   function connectBridge() {
-    return new Socket(LG.config.bridgeUrl, 'köprü', function (msg) {
+    var sk = new Socket(LG.config.bridgeUrl, 'köprü', function (msg) {
       if (msg && msg.type === 'status') { fire('bridgeStatus', msg); return; }
+      if (msg && msg.type === 'control') { handleControl(msg); return; }
       if (msg && msg.type) LG.emit(msg);
     });
+    sockets.push(sk);
+    return sk;
   }
+
+  // ---------------------------------------------------------------------------
+  // Uzaktan kontrol (sunucu paneli → köprü → oyun). OBS'teki oyun klavye alamadığı için
+  // sunucu panelindeki düğmeler bu yolla oyunun kısayollarını tetikler.
+  //   { type:'control', action:'key', key:'n', game:'dolmus' }
+  //   { type:'control', action:'mute', userId:'...' }   bu kişinin büyük kutlamalarını sadeleştir
+  // ---------------------------------------------------------------------------
+  LG.spotlightMuted = new Set();
+  function handleControl(c) {
+    if (!c || (c.game && LG.gameId && c.game !== LG.gameId)) return;
+    if (c.action === 'key' && c.key) {
+      var k = String(c.key).toLowerCase();
+      for (var i = 0; i < keyHandlers.length; i++) if (keyHandlers[i].key === k) { try { keyHandlers[i].fn({ remote: true }); } catch (e) { console.error(e); } }
+    } else if (c.action === 'mute' && c.userId) LG.spotlightMuted.add(String(c.userId));
+    else if (c.action === 'unmute' && c.userId) LG.spotlightMuted.delete(String(c.userId));
+    fire('control', c);
+  }
+  LG.handleControl = handleControl;
+  // Kontrol mesajı gönder (sunucu paneli kullanır). Köprü yoksa aynı tarayıcıdaki sekmelere gider.
+  LG.sendControl = function (msg) {
+    var m = Object.assign({ type: 'control' }, msg);
+    var sent = false;
+    for (var i = 0; i < sockets.length; i++) if (sockets[i].send(m)) sent = true;
+    try { if (LG.hostBus) LG.hostBus.channel.postMessage({ __control: m }); } catch (e) {}
+    return sent;
+  };
   function connectTikfinity() {
     return new Socket(LG.config.tikfinityUrl, 'TikFinity', function (msg) {
       if (!msg) return;
@@ -523,6 +560,7 @@
         },
         channel: bc,
       };
+      bc.onmessage = function (m) { if (m && m.data && m.data.__control) handleControl(m.data.__control); };
     }
   } catch (e) { /* yok say */ }
 

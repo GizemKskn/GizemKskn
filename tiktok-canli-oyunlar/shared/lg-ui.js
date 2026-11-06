@@ -306,10 +306,36 @@
   var toasts = [];
   ui.celebrateEnabled = true;
   // Varsayılan hediye kutlaması. Oyunlar LG.ui.celebrateEnabled=false yapıp kendi kutlamasını çizebilir.
+  // Aynı kişinin büyük kutlamaları arasında bekleme (bir kişinin ekranı tekellemesini önler),
+  // oturum yumuşak sınırı ve sunucunun "sadeleştir" komutu burada uygulanır.
+  var lastSpot = new Map();
+  var capThanked = new Set();
+  ui.spotlightAllowed = function (u, tier) {
+    if (!u || tier < 3) return true;
+    if (LG.spotlightMuted && LG.spotlightMuted.has(u.id)) return false;
+    var cap = LG.config.softcap;
+    if (cap > 0 && u.coins > cap) {
+      if (!capThanked.has(u.id)) { capThanked.add(u.id); ui.toast(u.name + ', efsanesin! Çok teşekkürler 💖', { icon: '👑', color: '#ffd166', life: 5 }); }
+      return false;
+    }
+    var now = LG.now();
+    var last = lastSpot.get(u.id) || -999;
+    if (now - last < LG.config.spotlightCooldown) return false;
+    lastSpot.set(u.id, now);
+    return true;
+  };
   ui.celebrate = function (evt, o) {
     o = o || {};
     var g = evt.gift, u = evt.user;
     var tier = g ? g.tier : (o.tier || 3);
+    // Aynı kişiden aynı hediye kuyrukta bekliyorsa tekrar etme, sayacı artır (x12)
+    if (g && tier >= 3) {
+      for (var qi = 0; qi < celebQueue.length; qi++) {
+        var q = celebQueue[qi];
+        if (q.user === u && q.giftName === g.name) { q.combo += g.count; q.text = u.name + ' · ' + g.name + ' x' + q.combo; return; }
+      }
+    }
+    if (tier >= 3 && !ui.spotlightAllowed(u, tier)) tier = 2; // sadeleştir: küçük teşekkür
     var text = o.text || (u.name + (g ? ' · ' + g.name + (g.count > 1 ? ' x' + g.count : '') : ''));
     var sub = o.sub || (tier >= 5 ? 'MUHTEŞEM! Teşekkürler 💖' : tier >= 4 ? 'Çok teşekkürler! 💖' : 'Teşekkürler!');
     if (tier <= 2) {
@@ -318,7 +344,7 @@
       return;
     }
     if (celebQueue.length > 6) celebQueue.shift();
-    celebQueue.push({ user: u, text: text, sub: sub, tier: tier, emoji: g ? LG.giftEmoji(g) : (o.emoji || '🎉'), t: 0, dur: tier >= 6 ? 6 : tier >= 5 ? 4.5 : tier >= 4 ? 3 : 2.2 });
+    celebQueue.push({ user: u, giftName: g ? g.name : '', combo: g ? g.count : 1, text: text, sub: sub, tier: tier, emoji: g ? LG.giftEmoji(g) : (o.emoji || '🎉'), t: 0, dur: tier >= 6 ? 7 : tier >= 5 ? 5 : tier >= 4 ? 3.5 : 2.4 });
   };
   ui.toast = function (text, o) {
     o = o || {};
@@ -556,9 +582,12 @@
       ctx.restore();
       ui.text(ctx, '🎥 CANLI', cm.x + 70, cm.y + 26, { size: 24, color: '#ff4d6d' });
     }
-    // Marka (@kullanıcıadı)
-    if (LG.config.brand) {
-      ui.text(ctx, LG.config.brand, LG.W / 2, LG.SAFE.bottom + 26, { size: 30, color: 'rgba(255,255,255,0.75)', strokeColor: 'rgba(0,0,0,0.5)' });
+    // Marka (@kullanıcıadı) + baskısız katılım notu
+    var foot = [];
+    if (LG.config.brand) foot.push(LG.config.brand);
+    if (LG.config.footer) foot.push('Hediye zorunlu değil — yorum yazman yeterli 💬');
+    if (foot.length) {
+      ui.text(ctx, foot.join('  ·  '), LG.W / 2, LG.SAFE.bottom + 24, { size: 26, color: 'rgba(255,255,255,0.72)', strokeColor: 'rgba(0,0,0,0.55)', maxWidth: LG.W - 80 });
     }
     // Bağlantı durumu (değişince 5 sn görünür)
     if (!LG.config.hideStatus && (connShowT > 0 || LG.config.debug)) {

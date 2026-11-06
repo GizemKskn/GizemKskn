@@ -85,6 +85,14 @@ wss.on('connection', (ws) => {
   status.istemciler = wss.clients.size;
   ws.send(JSON.stringify({ type: 'status', ...status }));
   ws.on('close', () => { status.istemciler = wss.clients.size; });
+  // Sunucu panelinden gelen kontrol mesajlarını (ör. "yeni tur" tuşu) tüm oyunlara ilet
+  ws.on('message', (raw) => {
+    let m;
+    try { m = JSON.parse(String(raw)); } catch (e) { return; }
+    if (!m || m.type !== 'control') return;
+    const msg = JSON.stringify(m);
+    for (const c of wss.clients) if (c !== ws && c.readyState === 1) c.send(msg);
+  });
 });
 function setStatus(patch) {
   Object.assign(status, patch);
