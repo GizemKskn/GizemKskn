@@ -785,7 +785,7 @@
       g.fillStyle = rg; g.fillRect(0, 0, W, H);
     });
     // soluk el emojisi deseni
-    var hands = ['✋', '🤚', '✌️', '👌', '🫶', '👏', '🤞', '🖐️'];
+    var hands = ['✋', '🤚', '✌️', '👌', '🙌', '👏', '🤞', '🖐️'];
     g.save();
     g.globalAlpha = 0.13;
     g.font = '58px ' + ui.EMOJI_FONT; g.textAlign = 'center'; g.textBaseline = 'middle';

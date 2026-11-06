@@ -510,7 +510,17 @@
   A.windowPath = windowPath;
   A.winTop = function (f) { return -252 - 10 * f; };
 
-  var bodyGradCache = null;
+  var bodyGradCache = null, checkerCache = null;
+  function checkerPat(ctx) {
+    if (checkerCache) return checkerCache;
+    var c = document.createElement('canvas'); c.width = 14; c.height = 14;
+    var g = c.getContext('2d');
+    g.fillStyle = '#111'; g.fillRect(0, 0, 14, 14);
+    g.fillStyle = '#fff'; g.fillRect(0, 0, 7, 7); g.fillRect(7, 7, 7, 7);
+    checkerCache = ctx.createPattern(c, 'repeat');
+    return checkerCache;
+  }
+  A.checkerPat = checkerPat;
   A.busBody = function (ctx, S) {
     var f = S.f, t = S.t;
     // gövde
@@ -525,10 +535,8 @@
     // çatı parlaklığı
     ctx.save(); bodyPath(ctx, f); ctx.clip();
     ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(-372, -300 - 40 * f, 760, 22 + 30 * f);
-    // dama şerit
-    ctx.fillStyle = '#111'; ctx.fillRect(-380, -126, 770, 14);
-    ctx.fillStyle = '#fff';
-    for (var x = -380; x < 390; x += 14) { ctx.fillRect(x, -126 + ((x / 14) & 1 ? 0 : 7), 7, 7); ctx.fillRect(x + 7, -126 + ((x / 14) & 1 ? 7 : 0), 7, 7); }
+    // dama şerit (önbellekli desen)
+    ctx.save(); ctx.translate(-380, -126); ctx.fillStyle = checkerPat(ctx); ctx.fillRect(0, 0, 770, 14); ctx.restore();
     // alt etek
     ctx.fillStyle = '#2b2b33'; ctx.fillRect(-380, -26, 770, 30);
     ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(-380, -26, 770, 4);
@@ -655,9 +663,7 @@
     ctx.strokeStyle = '#3b2a00'; ctx.lineWidth = 4;
     ctx.strokeRect(x0, top, x1 - x0, -8 - top);
     ctx.beginPath(); ctx.moveTo(x0, -140); ctx.lineTo(x1, -140); ctx.stroke();
-    ctx.fillStyle = '#111'; ctx.fillRect(x0 - 2, -126, x1 - x0 + 4, 14);
-    ctx.fillStyle = '#fff';
-    for (var x = x0; x < x1; x += 14) ctx.fillRect(x, -126 + ((x / 14) & 1 ? 0 : 7), 7, 7);
+    ctx.save(); ctx.translate(x0 - 2, -126); ctx.fillStyle = checkerPat(ctx); ctx.fillRect(0, 0, x1 - x0 + 4, 14); ctx.restore();
     ctx.fillStyle = '#222'; rr(ctx, x0 + 10, -100, 18, 8, 3); ctx.fill();
     ctx.restore();
   };
@@ -938,11 +944,8 @@
   // Dama desenli şerit (taksi/dolmuş havası)
   A.checker = function (ctx, x, y, w, h) {
     ctx.save();
-    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    ctx.fillStyle = '#111'; ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = '#fff';
-    var s = h / 2;
-    for (var i = 0; i * s < w; i++) { ctx.fillRect(x + i * s, y + (i % 2 ? 0 : s), s, s); }
+    ctx.translate(x, y); ctx.scale(h / 14, h / 14);
+    ctx.fillStyle = checkerPat(ctx); ctx.fillRect(0, 0, w * 14 / h, 14);
     ctx.restore();
   };
 })();

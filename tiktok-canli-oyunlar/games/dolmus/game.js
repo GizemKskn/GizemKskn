@@ -1707,22 +1707,21 @@
       var space = fx.rocket && fx.rocket.t >= 4.0 && fx.rocket.t < 10.5;
       ctx.save();
       ui.applyShake(ctx);
-      var SK = window.__dolSkip || {};
       if (space) {
         drawSpace(ctx, t);
       } else {
-        if (!SK.bg) drawBackground(ctx, t); else { ctx.fillStyle = '#58c'; ctx.fillRect(0, 0, W, LG.H); }
+        drawBackground(ctx, t);
         // gölge
         var sh = clamp(1 - bus.alt / 400, 0.2, 1);
         ctx.fillStyle = 'rgba(0,0,0,' + 0.3 * sh + ')';
         ctx.beginPath(); ctx.ellipse(BUS_X, GROUND + 2, 400 * sh, 16 * sh, 0, 0, TAU); ctx.fill();
         drawSpeedLines(ctx);
-        if (!SK.bus) drawBus(ctx, t, false);
+        drawBus(ctx, t, false);
         drawWind(ctx, t);
         drawProps(ctx, t);
         var showSign = G.state === 'brake' ? true : G.signX > -200 && G.signX < W + 200;
         if (showSign) A.stopSign(ctx, G.signX, 1150, G.signName, 1);
-        if (!SK.crowd) drawCrowdAndWalkers(ctx, t);
+        drawCrowdAndWalkers(ctx, t);
         drawAllTags(ctx, t);
         drawBubbles(ctx);
         drawNotesWorld(ctx, t);

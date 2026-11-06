@@ -34,8 +34,8 @@
   var TOP = { y: 242, h: 86 };
   var CARD = { x: 60, y: 352, w: 960 };
   var MC_CARD_H = 268, W_CARD_H = 350;          // 352..620 / 352..702
-  var OPT = { x: 60, y: 636, w: 960, h: 86, gap: 14 }; // 636..1022
-  var TICK = { x: 60, y: 1030, w: 960, h: 46 };        // son cevap verenlerin isimleri ..1076
+  var OPT = { x: 60, y: 636, w: 960, h: 84, gap: 12 }; // 636..1008
+  var TICK = { x: 50, y: 1016, w: 980, h: 60 };        // son cevap verenlerin isimleri ..1076
   var SLOT_Y = 714, SLOT_H = 120;               // 714..834
   var WIN_Y = 846, WIN_H = 128;                 // 846..974
   var GUESS_Y = 986;                            // 986..1070
@@ -150,6 +150,23 @@
   var introCount = -1;
   var hintAnchor = 0;
   var spotLast = new Map(), capThanked = new Set();
+  // Sıralama: puan, eşitlikte toplam cevap süresi az olan önde (kürsüde eşitlik adil çözülsün)
+  var tbreak = new Map(), rankCache = [], rankDirty = true, rankAt = -9;
+  function addScore(u, pts, t) {
+    board.add(u, pts);
+    tbreak.set(u.id, (tbreak.get(u.id) || 0) + (t || 0));
+    rankDirty = true;
+  }
+  function rankTop(n, force) {
+    var tm = now();
+    if (rankDirty && (force || tm - rankAt > 0.25)) {
+      var arr = [];
+      board.scores.forEach(function (e) { if (e.score > 0) arr.push(e); });
+      arr.sort(function (a, b) { return (b.score - a.score) || ((tbreak.get(a.user.id) || 0) - (tbreak.get(b.user.id) || 0)); });
+      rankCache = arr.slice(0, 10); rankDirty = false; rankAt = tm;
+    }
+    return rankCache.slice(0, n);
+  }
   var DECOYS = {};                 // kelime/plaka: "toplu tahmin" (rize trabzon ordu…) yakalamak için
 
   // ---------------------------------------------------------------------------
@@ -269,6 +286,7 @@
     round = n; qNum = 0;
     pattern = PATTERNS[(n - 1) % PATTERNS.length];
     board.reset(); streak.clear(); roundPlayers.clear();
+    tbreak.clear(); rankCache = []; rankDirty = true;
     lbPos.clear(); lbTop = [];
     podium = null; Q = null;
     LG.music.play('quiz');
@@ -361,7 +379,7 @@
         if (a.opt === ci) {
           var bonus = Math.round(100 * clamp(1 - a.t / Q.baseDur, 0, 1));
           a.pts = (100 + bonus) * Q.mult;
-          board.add(a.user, a.pts);
+          addScore(a.user, a.pts, a.t);
           correct.push(a);
           bump(a.user, true);
         } else bump(a.user, false);
@@ -394,7 +412,7 @@
     hintAnchor = now();
     Q = null;
     setTempo(false);
-    var top = board.top(5).slice();
+    var top = rankTop(5, true);
     podium = { top: top, players: roundPlayers.size, boomed: false, stage: 0 };
     LG.music.play('party');
     LG.sfx('drum');
@@ -567,7 +585,7 @@
       if (Q.winners.length < 3) {
         var rank = Q.winners.length;
         var pts = WIN_PTS[rank] * Q.mult;
-        board.add(u, pts);
+        addScore(u, pts, phase === 'ask' ? Q.t : 0);
         Q.winners.push({ user: u, pts: pts, t: phase === 'ask' ? Q.t : 0, at: now() });
         var wx = winX(rank) + 155;
         ui.burst(wx, WIN_Y + 60, { count: rank === 0 ? 50 : 30, speed: 600 });
@@ -576,7 +594,7 @@
         if (Q.winners.length === 3 && phase === 'ask' && Q.left > 4) { Q.left = 4; Q.closing = true; }
       } else {
         Q.late++;
-        board.add(u, LATE_PTS * Q.mult);
+        addScore(u, LATE_PTS * Q.mult, phase === 'ask' ? Q.t : 0);
         addGuess(u, null, true);
         LG.sfx('pop');
       }
@@ -679,7 +697,8 @@
     }
     if (tier >= 5 && big) {
       LG.sfx('mega'); ui.rain({ count: tier >= 6 ? 240 : 150 }); ui.flash('#fff3b0', 0.35); ui.shake(16, 0.6);
-      ui.burst(W / 2, TOP.y + 70, { count: tier >= 6 ? 26 : 16, speed: 900, shape: 'emoji', emoji: em, size: 22, up: 300, life: 1.8 });
+      ui.burst(170, TOP.y + 60, { count: 8, speed: 650, shape: 'emoji', emoji: '⭐', size: 16, up: 420, life: 1.2 });
+      ui.burst(910, TOP.y + 60, { count: 8, speed: 650, shape: 'emoji', emoji: '💖', size: 16, up: 420, life: 1.2 });
     } else if (tier >= 4) {
       LG.sfx('fanfare'); ui.burst(W / 2, TOP.y + 60, { count: 90, speed: 900 });
     } else {
@@ -853,7 +872,7 @@
       feedCur.dur = 2.4;
     }
     // liderlik animasyonu
-    lbTop = board.top(5);
+    lbTop = rankTop(5);
     for (var r = 0; r < lbTop.length; r++) {
       var id = lbTop[r].user.id;
       var tx = lbSlotX(r);
@@ -1334,7 +1353,7 @@
     var x = TICK.x + 10 + (Q.revealedAt != null && Q.tick.length ? 160 : 0);
     for (var i = 0; i < Q.tick.length; i++) {
       var tk = Q.tick[i];
-      if (!tk.w) tk.w = ui.nameTag(tk.user, 24).width + 42;
+      if (!tk.w) tk.w = ui.nameTag(tk.user, 28).width + 48;
       if (tk.x < 0) tk.x = x - 50;
       tk.x += (x - tk.x) * Math.min(1, dt * 12);
       x += tk.w + 8;
@@ -1345,19 +1364,19 @@
     ui.panel(ctx, TICK.x, y, TICK.w, h, { r: h / 2, fill: 'rgba(10,6,40,0.62)', border: rv ? 'rgba(31,209,154,0.6)' : 'rgba(255,255,255,0.16)', lineWidth: 3 });
     if (!Q.tick.length) {
       var msg = rv ? '😅 Bu soruyu bilen olmadı — sıradakinde sen bil!' : '💬 a, b, c ya da d yaz — adın burada görünsün!';
-      ui.text(ctx, msg, TICK.x + TICK.w / 2, y + h / 2 + 1, { size: 27, color: 'rgba(255,255,255,0.85)', maxWidth: TICK.w - 40, strokeWidth: 4 });
+      ui.text(ctx, msg, TICK.x + TICK.w / 2, y + h / 2 + 1, { size: 30, color: 'rgba(255,255,255,0.85)', maxWidth: TICK.w - 40, strokeWidth: 4 });
       return;
     }
     ctx.save();
     ui.roundRect(ctx, TICK.x, y, TICK.w, h, h / 2); ctx.clip();
-    if (rv) ui.text(ctx, '✅ Bilenler', TICK.x + 86, y + h / 2 + 1, { size: 27, color: '#7dffcf', strokeWidth: 4 });
+    if (rv) ui.text(ctx, '✅ Bilenler', TICK.x + 88, y + h / 2 + 1, { size: 29, color: '#7dffcf', strokeWidth: 4 });
     for (var i = 0; i < Q.tick.length; i++) {
       var tk = Q.tick[i];
       if (tk.x > TICK.x + TICK.w || !tk.w) break;
       var age = now() - tk.at;
       if (age < 0) continue;
       var sc = 0.6 + 0.4 * ease.outBack(clamp(age / 0.3, 0, 1));
-      var cw = tk.w, ch = 36, cx = tk.x, cy = y + h / 2;
+      var cw = tk.w, ch = 46, cx = tk.x, cy = y + h / 2;
       var col = tk.ok ? '#1fd19a' : OPT_COL[tk.opt];
       ctx.save();
       ctx.globalAlpha = clamp(age / 0.18, 0, 1);
@@ -1365,8 +1384,8 @@
       ui.roundRect(ctx, cx, cy - ch / 2, cw, ch, ch / 2);
       ctx.fillStyle = tk.ok ? 'rgba(8,70,50,0.96)' : 'rgba(24,12,66,0.96)'; ctx.fill();
       ctx.lineWidth = 3; ctx.strokeStyle = col; ctx.stroke();
-      ui.avatar(ctx, tk.user, cx + 19, cy, 14, { ringWidth: 2, ring: col });
-      ui.drawNameTag(ctx, tk.user, cx + 36 + (cw - 42) / 2, cy + 1, 24);
+      ui.avatar(ctx, tk.user, cx + 23, cy, 18, { ringWidth: 3, ring: col });
+      ui.drawNameTag(ctx, tk.user, cx + 42 + (cw - 48) / 2, cy + 1, 28);
       ctx.restore();
     }
     ctx.restore();
@@ -1534,8 +1553,9 @@
     ctx.save();
     ctx.globalAlpha = clamp(outP * 3, 0, 1);
     if (hero) {
-      // altın ışık huzmeleri
+      // altın ışık huzmeleri (yalnız afiş bandında — soru kartının üstüne taşmaz)
       ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, W, Math.max(0, y + h + 6)); ctx.clip();
       ctx.translate(W / 2, y + h / 2);
       ctx.rotate(t * 0.5);
       ctx.fillStyle = 'rgba(255,215,90,0.16)';

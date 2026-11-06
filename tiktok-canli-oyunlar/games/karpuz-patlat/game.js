@@ -334,6 +334,8 @@
     LG.sfx('fanfare');
     after(0.4, function () { LG.sfx('clap'); });
     after(0.8, function () { LG.sfx('clap'); });
+    var nf = FRUITS[(S.fi + 1) % FRUITS.length];
+    after(3.2, function () { if (S.st === 'result') note('⏭️', fmt(T.next, { f: nf.emoji + ' ' + KP.fruitName(nf) }), '#7fd8ff'); });
     ui.burst(150, 1120, { angle: -PI / 2 + 0.35, spread: 0.7, count: 70, speed: 1300 });
     ui.burst(930, 1120, { angle: -PI / 2 - 0.35, spread: 0.7, count: 70, speed: 1300 });
     LG.music.play('party');
@@ -831,7 +833,7 @@
     var hx = x + 5 + max(h / 2, fw);
     ui.emoji(ctx, S.F.emoji, min(x + w - 26, hx), y + h / 2 + sin(t * 10) * (danger ? 4 : 1.5), 48 + (danger ? 6 * sin(t * 20) : 0), 0.9);
     var lvl = done ? T.burstLevel : T.levels[pv < 0.4 ? 0 : pv < 0.65 ? 1 : pv < 0.85 ? 2 : 3];
-    ui.text(ctx, T.tension + ' %' + Math.round(pv * 100) + '  ·  ' + lvl, x + w / 2, y + h / 2 + 2, { size: 31, maxWidth: w - 140, strokeWidth: 7 });
+    ui.text(ctx, T.tension + ' ' + fmt(T.pct, { n: Math.round(pv * 100) }) + '  ·  ' + lvl, x + w / 2, y + h / 2 + 2, { size: 31, maxWidth: w - 140, strokeWidth: 7 });
     ctx.restore();
   }
 
@@ -848,12 +850,12 @@
     if (!GC.l) { GC.l = A.mk(w, h); GC.r = A.mk(w, h); }
     var lc = GC.l.getContext('2d'), rc = GC.r.getContext('2d');
     lc.clearRect(0, 0, w, h); rc.clearRect(0, 0, w, h);
-    var rowH = (h - 56) / 5, i, cy;
+    var rows = clamp(Math.floor((h - 56) / 84), 2, 5), rowH = (h - 56) / rows, i, cy;
     // sol: son lastikler
     ui.panel(lc, 2, 2, w - 4, h - 4, { r: 26, fill: 'rgba(20,10,32,0.52)', border: 'rgba(255,255,255,0.18)', lineWidth: 3 });
     ui.text(lc, '🎗️ ' + T.lastTitle, w / 2, 30, { size: 25, color: '#ffd166', maxWidth: w - 16 });
     if (!S.recent.length) ui.text(lc, T.emptyList, w / 2, 56 + rowH * 0.5, { size: 24, color: 'rgba(255,255,255,0.8)', maxWidth: w - 16 });
-    for (i = 0; i < S.recent.length; i++) {
+    for (i = 0; i < S.recent.length && i < rows; i++) {
       var r = S.recent[i];
       cy = 56 + rowH * i + rowH * 0.36;
       ui.avatar(lc, r.u, w / 2, cy, i === 0 ? 29 : 25, { ring: i === 0 ? '#ffd166' : '#ffffff', ringWidth: i === 0 ? 5 : 3 });
@@ -862,7 +864,7 @@
     // sağ: kahramanlar
     ui.panel(rc, 2, 2, w - 4, h - 4, { r: 26, fill: 'rgba(20,10,32,0.52)', border: 'rgba(255,209,102,0.35)', lineWidth: 3 });
     ui.text(rc, '🏆 ' + T.heroesTitle, w / 2, 30, { size: 25, color: '#ffd166', maxWidth: w - 16 });
-    var top = S.board.top(5);
+    var top = S.board.top(rows);
     if (!top.length) ui.text(rc, T.emptyList, w / 2, 56 + rowH * 0.5, { size: 24, color: 'rgba(255,255,255,0.8)', maxWidth: w - 16 });
     for (i = 0; i < top.length; i++) {
       var e = top[i];
@@ -884,7 +886,7 @@
     if (S.recent.length) {
       var age = tn - S.recent[0].t;
       if (age < 0.7) {
-        var cy = y0 + 56 + ((L.gBot - L.gTop - 56) / 5) * 0.36;
+        var gh = L.gBot - L.gTop, cy = y0 + 56 + ((gh - 56) / clamp(Math.floor((gh - 56) / 84), 2, 5)) * 0.36;
         ctx.strokeStyle = 'rgba(255,209,102,' + (1 - age / 0.7).toFixed(3) + ')'; ctx.lineWidth = 5;
         ctx.beginPath(); ctx.arc(xl + w / 2, cy, 30 + age * 60, 0, TAU); ctx.stroke();
       }
