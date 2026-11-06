@@ -360,6 +360,11 @@
   function startBack() {
     mom.st = 'back'; mom.t = 0; mom.dur = 0.24;
     mom.needLook = false;
+    // anne bakarken biriken beğeniler şimdi minik adıma dönüşür (beğeni hiçbir zaman boşa gitmez)
+    for (var i = 0; i < kidList.length; i++) {
+      var lk = kidList[i];
+      if (lk.likeAcc >= 10 && canAct(lk)) { var ln = Math.floor(lk.likeAcc / 10); lk.likeAcc -= ln * 10; lk.lastStep = -99; tryMove(lk, CFG.tiny * Math.min(ln, 3), true, true); }
+    }
     if (S.phase === 'play' && S.introT <= 0) stamp = { text: 'GİT!', icon: '🏃', col: '#3dff8f', t: 0, dur: 0.75 };
     if (!mom.caughtAny) say(LG.pick(['Hıı… iyi.', 'Uslu durun!', 'Hmph.']), 1.0);
   }
@@ -596,6 +601,7 @@
       next: TREATS[S.round % TREATS.length],
     };
     pending = [];
+    banners = [];   // bekleyen şeritler özet kartında zaten var; tur bitince eskimiş teşekkür/kazanan şeridi akmasın
     for (var m = 0; m < kidList.length; m++) if (kidList[m].state === 'caught') kidList[m].state = 'idle';
     mom.distract = null; mom.queued = null; mom.prop = null; mom.pendingTurn = false;
     mom.st = 'end'; mom.t = 0; mom.view = 'front'; mom.flip = 1; mom.tx = mom.x < 200 ? 540 : mom.x; mom.still = true;
@@ -660,7 +666,12 @@
         if (banners[i].key === o.key) { banners[i].extra++; banners[i].user = o.user; banners[i].text = o.text; return; }
       }
     }
-    if (o.front) banners.unshift(o); else banners.push(o);
+    if (o.front) {
+      // öne alınanlar (🥇🥈🥉) kendi aralarında geliş sırasını korusun
+      var at = 0;
+      while (at < banners.length && banners[at].front) at++;
+      banners.splice(at, 0, o);
+    } else banners.push(o);
     if (banners.length > 5) {
       for (var j = banners.length - 1; j >= 0 && banners.length > 5; j--) if (banners[j].kind !== 'win') banners.splice(j, 1);
       if (banners.length > 5) banners.length = 5;

@@ -1298,8 +1298,17 @@
   }
   var cardQ = [], card = null;
   function bigCard(o) {
+    var key = (o.user ? o.user.id : '') + '|' + o.title;
+    var same = card && card.key === key && card.t < card.dur - 1 ? card : null;
+    for (var i = 0; i < cardQ.length && !same; i++) if (cardQ[i].key === key) same = cardQ[i];
+    if (same) {
+      same.n = (same.n || 1) + 1;
+      same.title = o.title.replace(/[!]?$/, '') + ' ×' + same.n;
+      if (same === card) card.dur = Math.min(card.t + 2.4, card.dur + 1.6);
+      return;
+    }
     if (cardQ.length > 4) cardQ.shift();
-    cardQ.push({ title: o.title, sub: o.sub || '', user: o.user || null, icon: o.icon || '🫖', mega: !!o.mega, t: 0, dur: o.dur || (o.mega ? 5.5 : 3.4) });
+    cardQ.push({ key: key, title: o.title, sub: o.sub || '', user: o.user || null, icon: o.icon || '🫖', mega: !!o.mega, t: 0, dur: o.dur || (o.mega ? 5.5 : 3.4) });
   }
 
   // ===========================================================================
@@ -2249,7 +2258,7 @@
       chalk(g, res.quip, cx, B.y + 124, { size: 24, color: '#fffdf2', maxWidth: B.w - 30 });
       chalk(g, topic.q + '  ·  ' + upTR(topic.A.label) + ' ' + topic.va + ' – ' + topic.vb + ' ' + upTR(topic.B.label), cx, B.y + 155, { size: 19, color: 'rgba(255,250,235,0.75)', maxWidth: B.w - 30 });
     } else {
-      chalk(g, '— MENÜ —', cx, B.y + 24, { size: 26, color: '#ffe08a' });
+      chalk(g, '— MENÜ · yaz, gelsin! —', cx, B.y + 24, { size: 26, color: '#ffe08a', maxWidth: B.w - 30 });
       var colL = B.x + 24, colR = B.x + B.w / 2 + 8;
       var L1 = ['🫖 Çay (demli / açık)', '☕ Türk kahvesi', '🍊 Oralet  ·  🥛 Ayran'];
       var L2 = ['🥯 Simit  ·  🥪 Tost', '💧 Su  ·  🫧 Soda', '🎲 tavla  ·  🐈 pisi'];
@@ -2295,9 +2304,12 @@
     var sc = LG.ease.outBack(Math.min(1, k / 0.45));
     g.save();
     if (c.mega) {
-      g.globalAlpha = a * 0.55; g.fillStyle = '#0a0410'; g.fillRect(0, 0, W, H);
+      // Kart üstte durur ki altında bütün bahçenin bardak kaldırıp kutlaması görünsün;
+      // sohbet oylaması sürüyorsa tahta kapanmasın diye kart aşağıya iner.
+      g.globalAlpha = a * 0.38; g.fillStyle = '#0a0410'; g.fillRect(0, 0, W, H);
       g.globalAlpha = a;
-      var cy0 = 760;
+      if (c.cy == null) c.cy = topic.st === 'idle' ? 545 : 860;
+      var cy0 = c.cy;
       g.save(); g.translate(W / 2, cy0); g.rotate(t * 0.4);
       g.globalCompositeOperation = 'lighter';
       g.fillStyle = 'rgba(255,200,80,0.12)';
@@ -2307,13 +2319,13 @@
       }
       g.restore();
       g.translate(W / 2, cy0); g.scale(sc, sc);
-      var bw = 940, bh = 330;
+      var bw = 940, bh = 300;
       ui.panel(g, -bw / 2, -bh / 2, bw, bh, { r: 40, fill: 'rgba(70,14,10,0.94)', border: '#ffd166', lineWidth: 7 });
       if (c.user) ui.avatar(g, c.user, 0, -bh / 2 - 10, 74, { ring: '#ffd166', ringWidth: 7 });
       ui.emoji(g, c.icon, bw / 2 - 70, -bh / 2 + 50 + Math.sin(t * 6) * 6, 84);
       ui.emoji(g, '🫖', -bw / 2 + 70, -bh / 2 + 50 - Math.sin(t * 6) * 6, 70);
-      ui.text(g, c.title, 0, 30, { size: 58, color: '#ffe08a', maxWidth: bw - 80, strokeWidth: 9 });
-      ui.text(g, c.sub, 0, 104, { size: 32, color: '#fff3d6', maxWidth: bw - 80, strokeWidth: 6 });
+      ui.text(g, c.title, 0, 22, { size: 58, color: '#ffe08a', maxWidth: bw - 80, strokeWidth: 9 });
+      ui.text(g, c.sub, 0, 92, { size: 32, color: '#fff3d6', maxWidth: bw - 80, strokeWidth: 6 });
     } else {
       g.globalAlpha = a;
       var C2 = CARD;
@@ -2397,6 +2409,7 @@
     drawRockets(ctx);
     drawTop(ctx, t);
     if (topicOn) drawBoard(ctx, t); // sohbet sırasında tahta her şeyin önünde okunur
+    drawWfloat(ctx);
     drawPlaque(ctx, t);
     drawGauge(ctx, t);
     drawPill(ctx);

@@ -442,7 +442,7 @@
     }
   }
   function speedKw(dir, u) {
-    G.gaugeFx = dir; G.gaugeT = 0.8;
+    G.gaugeCol = dir > 0 ? '#ffd166' : '#4cc9f0'; G.gaugeT = 0.8;
     if (dir > 0) {
       G.kwBoost = Math.min(1.1, G.kwBoost + 0.3);
       // egzozdan "gaz" bulutu
@@ -488,7 +488,7 @@
 
   LG.on('like', function (e) {
     G.likeHeat = Math.min(2.4, G.likeHeat + Math.min(60, e.count) * 0.006);
-    G.gaugeFx = 1; G.gaugeT = Math.max(G.gaugeT || 0, 0.35);
+    if (!(G.gaugeT > 0.4)) { G.gaugeCol = '#ff4d6d'; G.gaugeT = 0.35; }
     if (LG.time - (G.lastHeart || 0) > 0.12) {
       G.lastHeart = LG.time;
       // hız göstergesinin yanından (göstergeyi kapatmadan) yükselen kalpler
@@ -801,6 +801,8 @@
       if (Math.abs(tempo - G.tempo) > 0.06) { G.tempo = tempo; LG.music.setTempo(tempo); }
     }
     if (G.shineT > 0) G.shineT -= dt;
+    if (G.gaugeT > 0) G.gaugeT -= dt;
+    for (var ti = toasts.length - 1; ti >= 0; ti--) { toasts[ti].t += dt; if (toasts[ti].t > toasts[ti].life) toasts.splice(ti, 1); }
     if (G.driverMoodT > 0) { G.driverMoodT -= dt; if (G.driverMoodT <= 0) G.driverMood = ''; }
     if (G.plateFlip >= 0) { G.plateFlip += dt / 0.9; if (G.plateFlip >= 0.5 && G.nextPlate) { G.plateText = G.nextPlate; G.nextPlate = null; } if (G.plateFlip >= 1) G.plateFlip = -1; }
 
@@ -870,6 +872,9 @@
       if (G.state === 'drive' && aboard.length > 0) {
         if (Math.random() < 0.3) sayDriver(aboard.length > 30 ? pick(D.DRIVER_FULL) : pick(D.DRIVER), { life: 2.4 });
         else { var rp = randomInside(); if (rp) sayP(rp, pick(D.CHATTER), { life: 2.6 }); }
+      } else if (G.state === 'drive' && !crowd.length) {
+        sayDriver(pick(D.EMPTY), { life: 2.6 });
+        G.driverMood = 'shout'; G.driverMoodT = 1.2;
       } else if (crowd.length > 0 && running) {
         var vis = crowd.slice(-CROWD_VIS);
         var cc = pick(vis); if (cc) say({ c: cc }, pick(['Bekle şoför bey!', 'Duuur!', 'Bizi de al!', 'Yetişiyorum!']), { life: 1.8 });
@@ -1037,6 +1042,7 @@
   function startSummary() {
     G.state = 'summary'; G.st = 0; G.forceGo = false;
     session.routes++;
+    passes.length = 0; pendingPasses.length = 0;
     var off = null, rel = null;
     stats.off.forEach(function (v) { if (!off || v.n > off.n) off = v; });
     stats.relays.forEach(function (v) { if (!rel || v.n > rel.n) rel = v; });
@@ -1058,6 +1064,13 @@
   function newRoute() {
     summary = null;
     setRoute(G.routeIdx + 1, G.palIdx + 1);
+    for (var i = 0; i < decorCarry.length; i++) {
+      var dc = decorCarry[i];
+      decor[dc.id] = true; decorPop[dc.id] = LG.time + 0.9 + i * 0.35;
+      moment(30, dc.name + ' dolmuşa ' + dc.d.name.toLocaleLowerCase('tr-TR') + ' taktı ' + dc.d.emoji);
+    }
+    if (decorCarry.length) G.shineT = 1.4;
+    decorCarry = [];
     G.plateFlip = 0;
     startStopState('stopped');
     G.signX = STOP_X;
@@ -1451,17 +1464,19 @@
       var lx = tmp.x + (q.slot.inside ? bus.lurch * 0.7 : 0);
       var top = q.slot.inside ? tmp.y - 6 : tmp.y - 22;
       toWorld(lx, top, tmp2);
-      var yy = placeTag(ctx, q.u, tmp2.x, tmp2.y - 16, 22, '#fff', q.wantOff ? 'rgba(193,18,31,0.92)' : 'rgba(0,0,0,0.6)', 2);
-      if (yy != null && q.wantOff) ui.emoji(ctx, '🛑', tmp2.x - ui.nameTag(q.u, 22, '#fff', 'rgba(193,18,31,0.92)').width / 2 - 14, yy, 24);
+      var fresh = !q.wantOff && LG.time - q.act < 2.5; // az önce yazdı: sarı etiket ("bu benim!")
+      var yy = placeTag(ctx, q.u, tmp2.x, tmp2.y - 16, 24, fresh ? '#1d1300' : '#fff', q.wantOff ? 'rgba(193,18,31,0.92)' : fresh ? '#ffd400' : 'rgba(0,0,0,0.6)', 2);
+      if (yy != null && q.wantOff) ui.emoji(ctx, '🛑', tmp2.x - ui.nameTag(q.u, 24, '#fff', 'rgba(193,18,31,0.92)').width / 2 - 14, yy, 26);
       if (yy != null) placed++;
     }
     // binenler
-    for (var h = 0; h < hoppers.length; h++) if (hoppers[h].hx != null) placeTag(ctx, hoppers[h].p.u, hoppers[h].hx, hoppers[h].hy, 24, '#fff', 'rgba(0,0,0,0.6)', 1);
+    for (var h = 0; h < hoppers.length; h++) if (hoppers[h].hx != null) placeTag(ctx, hoppers[h].p.u, hoppers[h].hx, hoppers[h].hy, 26, '#fff', 'rgba(0,0,0,0.6)', 1);
     // bekleyenler (en yeni 9)
     var vis0 = Math.max(0, crowd.length - CROWD_VIS), shown = 0;
     for (var c = crowd.length - 1; c >= vis0 && shown < 9; c--) {
       var cm = crowd[c];
-      if (placeTag(ctx, cm.u, cm.x, cm.y - 47 * CROWD_S - 50, 24, '#fff', 'rgba(0,0,0,0.6)', 2) != null) shown++;
+      var cf = LG.time - cm.act < 2.5;
+      if (placeTag(ctx, cm.u, cm.x, cm.y - 47 * CROWD_S - 50, 26, cf ? '#1d1300' : '#fff', cf ? '#ffd400' : 'rgba(0,0,0,0.6)', 2) != null) shown++;
     }
     // inenler
     for (var l = 0; l < leavers.length; l++) {
@@ -1607,7 +1622,12 @@
     ui.text(ctx, 'İNECEK VAR!', tx + titleW / 2, 290, { size: 76, weight: 900, color: '#ffd400', strokeColor: '#3b1d00', strokeWidth: 14 });
     ui.emoji(ctx, '🚐', tx + titleW + 52, 286, 72);
     ctx.restore();
-    // hız göstergesi
+    // hız göstergesi (beğeni / "bas" / "yavaş" gelince halka parlar)
+    if (G.gaugeT > 0) {
+      var ga = Math.min(1, G.gaugeT / 0.3);
+      ctx.save(); ctx.globalAlpha = ga; ctx.lineWidth = 9; ctx.strokeStyle = G.gaugeCol || '#ff4d6d';
+      ctx.beginPath(); ctx.arc(108, 290, 64 + (1 - ga) * 10, 0, TAU); ctx.stroke(); ctx.restore();
+    }
     A.speedo(ctx, 108, 290, 56, G.kmh, 140, t);
     // yolcu sayısı
     var n = aboard.length;
@@ -1807,9 +1827,11 @@
         ctx.fillStyle = 'rgba(0,0,0,' + 0.3 * sh + ')';
         ctx.beginPath(); ctx.ellipse(BUS_X, GROUND + 2, 400 * sh, 16 * sh, 0, 0, TAU); ctx.fill();
         drawSpeedLines(ctx);
+        if (flyK > 0.02) { toWorld(-366, -150, tmp); A.rainbow(ctx, tmp.x, tmp.y, t, flyK); }
         drawBus(ctx, t, false);
         drawWind(ctx, t);
         drawProps(ctx, t);
+        for (var fc = 0; fc < fClouds.length; fc++) A.cloud(ctx, fClouds[fc].x, fClouds[fc].y, fClouds[fc].s, 0.93);
         var showSign = G.state === 'brake' ? true : G.signX > -200 && G.signX < W + 200;
         if (showSign) A.stopSign(ctx, G.signX, 1150, G.signName, 1);
         drawCrowdAndWalkers(ctx, t);
@@ -1820,6 +1842,7 @@
       ctx.restore();
       drawHUD(ctx, t);
       drawBanner(ctx, t);
+      drawToasts(ctx);
       drawBigTexts(ctx, t);
       drawSummary(ctx, t);
     },

@@ -612,7 +612,8 @@
     energy.flash = 1;
     LG.sfx('levelup');
     var txt = '💪 SÜPER DESTEK x' + (energy.level + 1) + '!';
-    pop(txt, W / 2, win.y + Math.min(150, win.h * 0.42), { size: 60, color: '#ffe14d', life: 1.5, vy: -30, key: 'lvl' });
+    // "seçildi" kartı ve sonuç damgası sırasında yazı çıkmaz (bar parlar, ses çalar)
+    if (S.phase !== 'reveal' && S.phase !== 'result') pop(txt, W / 2, win.y + Math.min(150, win.h * 0.42), { size: 60, color: '#ffe14d', life: 1.5, vy: -30, key: 'lvl' });
     for (var i = 0; i < 6; i++) ui.burst(WX + 80 + i * 160, BAR_Y + 26, { count: 12, speed: 500, up: 400 });
     if (S.phase === 'task') LG.music.setTempo(Math.min(1.3, 1 + energy.level * 0.05));
   }
