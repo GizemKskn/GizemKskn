@@ -546,6 +546,16 @@
     if (flashT > 0) {
       ctx.save(); ctx.globalAlpha = (flashT / flashDur) * 0.7; ctx.fillStyle = flashColor; ctx.fillRect(0, 0, LG.W, LG.H); ctx.restore();
     }
+    // Eller kamerası çerçevesi (?cam=br): OBS'teki kamera bu çerçevenin içine oturtulur
+    if (LG.CAM) {
+      var cm = LG.CAM;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ui.roundRect(ctx, cm.x, cm.y, cm.w, cm.h, 22); ctx.fill();
+      ctx.lineWidth = 6; ctx.strokeStyle = 'hsl(' + ((LG.time * 40) % 360) + ',85%,65%)'; ctx.stroke();
+      ctx.restore();
+      ui.text(ctx, '🎥 CANLI', cm.x + 70, cm.y + 26, { size: 24, color: '#ff4d6d' });
+    }
     // Marka (@kullanıcıadı)
     if (LG.config.brand) {
       ui.text(ctx, LG.config.brand, LG.W / 2, LG.SAFE.bottom + 26, { size: 30, color: 'rgba(255,255,255,0.75)', strokeColor: 'rgba(0,0,0,0.5)' });

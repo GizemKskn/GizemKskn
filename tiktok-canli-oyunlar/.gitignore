@@ -1,2 +1,5 @@
 tools/shots/
 node_modules/
+dist/
+tools/.lisans-gizli.json
+*.lisans-gizli.json

@@ -59,6 +59,7 @@
     transparent: qb('transparent', false),
     block: (qp('block', '') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean),
     hideStatus: qb('hidestatus', false),
+    cam: qp('cam', ''), // eller kamerası çerçevesi: br | bl | tr | tl (boş = kapalı)
   };
   LG.qp = qp; LG.qb = qb; LG.qn = qn;
 
@@ -69,6 +70,15 @@
   // Üstte yayıncı adı/izleyici sayısı, altta yorum akışı ve hediye çubuğu, sağda butonlar var.
   LG.SAFE = { x: 40, y: 230, w: 1000, h: 1070 }; // y: 230..1300
   LG.SAFE.bottom = LG.SAFE.y + LG.SAFE.h;
+  // Eller kamerası için önerilen alan (OBS'te kamera kaynağını buraya yerleştirin).
+  // Varsayılan "br": sağ alt — TikTok yorum akışı solda olduğu için bu bölge çoğunlukla açık kalır.
+  LG.CAM_SLOTS = {
+    br: { x: 700, y: 1310, w: 340, h: 255 },
+    bl: { x: 40, y: 1310, w: 340, h: 255 },
+    tr: { x: 700, y: 240, w: 340, h: 255 },
+    tl: { x: 40, y: 240, w: 340, h: 255 },
+  };
+  LG.CAM = LG.CAM_SLOTS[LG.config.cam] || null;
 
   // ---------------------------------------------------------------------------
   // Yardımcılar
@@ -268,11 +278,24 @@
     { id: 5886, name: 'Galaksi', en: 'Galaxy', coins: 1000, emoji: '🌌' },
     { id: 6090, name: 'Havai Fişek', en: 'Fireworks', coins: 1088, emoji: '🎆' },
     { id: 6369, name: 'Aslan', en: 'Lion', coins: 29999, emoji: '🦁' },
+    // Türkiye'ye özel hediyeler (adlar TikTok'ta farklı dillerde gelebilir; LG.giftIs ile kontrol edin)
+    { id: 9001, name: 'Türk Kahvesi', en: 'Turkish Coffee', coins: 5, emoji: '☕', tr: true },
+    { id: 9002, name: 'Çay', en: 'Tea', coins: 50, emoji: '🫖', tr: true },
+    { id: 9003, name: 'Buket', en: 'Bouquet', coins: 100, emoji: '💐', tr: true },
+    { id: 9004, name: 'Rüzgar Dansözü', en: 'Wind Dancer', coins: 300, emoji: '💃', tr: true },
+    { id: 9005, name: 'Kurt', en: 'Wolf', coins: 5500, emoji: '🐺', tr: true },
     { id: 7312, name: 'Evren', en: 'TikTok Universe', coins: 44999, emoji: '🪐' },
   ];
   var giftByName = {};
   LG.GIFTS.forEach(function (g) { giftByName[g.en.toLowerCase()] = g; giftByName[g.name.toLowerCase()] = g; });
   LG.giftInfo = function (nameOrEn) { return giftByName[String(nameOrEn || '').toLowerCase()] || null; };
+  // Hediye adı listedeki kelimelerden birini içeriyor mu? Ör: LG.giftIs(e.gift, ['çay', 'tea'])
+  LG.giftIs = function (gift, words) {
+    if (!gift) return false;
+    var n = ' ' + LG.cmd.norm((gift.name || '') + ' ' + (gift.en || '')) + ' ';
+    for (var i = 0; i < words.length; i++) { if (n.indexOf(' ' + LG.cmd.norm(words[i]) + ' ') >= 0) return true; }
+    return false;
+  };
   // Kademe: 1 (1-4 jeton) … 6 (10.000+ jeton)
   LG.giftTier = function (coins) {
     if (coins >= 10000) return 6;
